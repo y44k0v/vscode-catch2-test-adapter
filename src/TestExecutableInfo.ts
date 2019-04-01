@@ -12,7 +12,7 @@ import * as c2fs from './FSWrapper';
 import { resolveVariables } from './Util';
 import { TestSuiteInfoFactory } from './TestSuiteInfoFactory';
 import { SharedVariables } from './SharedVariables';
-import { GazeWrapper, VSCFSWatcherWrapper, FSWatcher } from './FSWatcher';
+import { VSCFSWatcherWrapper, FSWatcher, ChokidarWrapper } from './FSWatcher';
 
 export class TestExecutableInfo implements vscode.Disposable {
   public constructor(
@@ -56,7 +56,7 @@ export class TestExecutableInfo implements vscode.Disposable {
       if (pattern.isPartOfWs) {
         execWatcher = new VSCFSWatcherWrapper(this._shared.workspaceFolder, pattern.relativeToWsPosix);
       } else {
-        execWatcher = new GazeWrapper([pattern.absPattern]);
+        execWatcher = new ChokidarWrapper([pattern.absPattern]);
       }
 
       filePaths = await execWatcher.watched();
@@ -137,7 +137,7 @@ export class TestExecutableInfo implements vscode.Disposable {
         }
 
         if (absPatterns.length > 0) {
-          const w = new GazeWrapper(absPatterns);
+          const w = new ChokidarWrapper(absPatterns);
           this._disposables.push(w);
 
           w.onError((e: Error) => this._shared.log.error('dependsOn watcher:', e, absPatterns));
