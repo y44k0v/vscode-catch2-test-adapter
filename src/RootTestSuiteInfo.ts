@@ -1,32 +1,21 @@
-//-----------------------------------------------------------------------------
-// vscode-catch2-test-adapter was written by Mate Pek, and is placed in the
-// public domain. The author hereby disclaims copyright to this source code.
-
 import * as vscode from 'vscode';
 
 import { TestExecutableInfo } from './TestExecutableInfo';
 import { AbstractTestSuiteInfoBase } from './AbstractTestSuiteInfoBase';
 import { AbstractTestSuiteInfo } from './AbstractTestSuiteInfo';
 import { AbstractTestInfo } from './AbstractTestInfo';
-import { TaskPool } from './TaskPool';
 import { SharedVariables } from './SharedVariables';
 
 export class RootTestSuiteInfo extends AbstractTestSuiteInfoBase implements vscode.Disposable {
   public readonly children: AbstractTestSuiteInfo[] = [];
   private _executables: TestExecutableInfo[] = [];
-  private readonly _taskPool: TaskPool;
 
-  public constructor(shared: SharedVariables, workerMaxNumber: number) {
-    super(shared, 'Catch2 and Google tests', undefined, undefined);
-    this._taskPool = new TaskPool(workerMaxNumber);
+  public constructor(id: string | undefined, shared: SharedVariables) {
+    super(shared, 'Catch2 and Google tests', undefined, id);
   }
 
   public dispose(): void {
     this._executables.forEach(e => e.dispose());
-  }
-
-  public set workerMaxNumber(workerMaxNumber: number) {
-    this._taskPool.maxTaskCount = workerMaxNumber;
   }
 
   public cancel(): void {
@@ -38,7 +27,7 @@ export class RootTestSuiteInfo extends AbstractTestSuiteInfoBase implements vsco
 
     this._executables = executables;
 
-    return Promise.all(executables.map(v => v.load().catch(e => this._shared.log.error(e, v)))).then(() => {});
+    return Promise.all(executables.map(v => v.load().catch(e => this._shared.log.exception(e, v)))).then(() => {});
   }
 
   public run(tests: string[]): Promise<void> {
@@ -58,8 +47,8 @@ export class RootTestSuiteInfo extends AbstractTestSuiteInfoBase implements vsco
     for (let i = 0; i < this.children.length; i++) {
       const child = this.children[i];
       ps.push(
-        child.run(testSet, this._taskPool).catch(err => {
-          this._shared.log.error('RootTestSuite.run.for.child', child.label, err);
+        child.run(testSet, this._shared.taskPool).catch(err => {
+          this._shared.log.error('RootTestSuite.run.for.child', child.label, child.execInfo.path, err);
         }),
       );
     }
@@ -88,12 +77,12 @@ export class RootTestSuiteInfo extends AbstractTestSuiteInfoBase implements vsco
     {
       // we want to filter the situation when 2 patterns match the same file
       const other = this.children.find((s: AbstractTestSuiteInfo) => {
-        return suite.execPath == s.execPath;
+        return suite.execInfo.path == s.execInfo.path;
       });
       if (other) {
         this._shared.log.warn(
           'execPath duplication: suite is skipped:',
-          suite.execPath,
+          suite.execInfo.path,
           suite.origLabel,
           other.origLabel,
         );

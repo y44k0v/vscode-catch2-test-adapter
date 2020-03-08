@@ -1,5 +1,4 @@
-#define CATCH_CONFIG_MAIN
-#include "catch.hpp.txt"
+#include "catch2/catch.hpp"
 
 // clang-format off
 // c++ -x c++ -std=c++17 -I ../Catch2/single_include -O0 -g -o suite3 ../vscode-catch2-test-adapter/src/test/suite3.cpp
@@ -63,3 +62,10 @@ TEST_CASE("spec § char") {}
 TEST_CASE("spec ± char") {}
 TEST_CASE("spec \" char") {}
 TEST_CASE("spec | char") {}
+
+TEST_CASE("spec char in section name") {
+  SECTION("`Config`s can be serialized") {
+    //
+    REQUIRE(true == false);
+  }
+}

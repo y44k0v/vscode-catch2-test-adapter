@@ -5,6 +5,7 @@ platform:
   - x64
 
 environment:
+  C2_DEBUG: true
   nodejs_version: "10"
 
   matrix:
@@ -16,13 +17,14 @@ install:
   - node --version
   - npm --version
   - npm install
-  - npm audit
+  - npm audit --production
   - npm run compile
+  - npm run webpack
 
 build: off
 
 test_script:
   - npm test
 
-on_failure:
-  - type .\out\tmp\workspaceFolder\FailedTestLogs\log_*.txt
+#on_failure:
+#  - type .\out\tmp\workspaceFolder\FailedTestLogs\log_*.txt

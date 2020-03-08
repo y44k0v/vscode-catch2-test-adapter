@@ -1,7 +1,3 @@
-//-----------------------------------------------------------------------------
-// vscode-catch2-test-adapter was written by Mate Pek, and is placed in the
-// public domain. The author hereby disclaims copyright to this source code.
-
 import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -25,21 +21,23 @@ export function spawnAsync(
       stdout: '',
       stderr: '',
       status: 0,
-      signal: (null as unknown) as string,
+      signal: null,
       error: (undefined as unknown) as Error,
       closed: false,
     };
 
-    const command = cp.spawn(cmd, args, options);
+    const command = cp.spawn(cmd, args || [], options || {});
+    // eslint-disable-next-line
+    (ret as any).process = command; // for debugging
 
     ret.pid = command.pid;
 
-    command.stdout.on('data', function(data) {
+    command.stdout!.on('data', function(data) {
       ret.stdout += data;
       ret.output[1] = ret.stdout;
     });
 
-    command.stderr.on('data', function(data) {
+    command.stderr!.on('data', function(data) {
       ret.stderr += data;
       ret.output[2] = ret.stderr;
     });
@@ -49,7 +47,7 @@ export function spawnAsync(
       reject(err);
     });
 
-    command.on('close', function(code: number, signal: string) {
+    command.on('close', function(code: number, signal: NodeJS.Signals) {
       ret.closed = true;
 
       if (signal !== null) {
@@ -76,7 +74,7 @@ const ExecutableFlag = fs.constants.X_OK;
 
 function accessAsync(filePath: string, flag: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    fs.access(filePath, flag, (err: Error) => {
+    fs.access(filePath, flag, (err: Error | null) => {
       if (err) reject(err);
       else resolve();
     });
@@ -84,7 +82,7 @@ function accessAsync(filePath: string, flag: number): Promise<void> {
 }
 
 // https://askubuntu.com/questions/156392/what-is-the-equivalent-of-an-exe-file
-const nativeExacutableExtensionFilter = new Set([
+const nativeExecutableExtensionFilter = new Set([
   '.c',
   '.cmake',
   '.cpp',
@@ -104,17 +102,20 @@ const nativeExacutableExtensionFilter = new Set([
   '.tar',
   '.txt',
 ]);
+
+const win32NativeExecutableExtensionFilter = new Set(['.exe', '.cmd', '.bat']);
+
 export function isNativeExecutableAsync(filePath: string): Promise<void> {
   const ext = path.extname(filePath);
   if (process.platform === 'win32') {
-    if (filePath.endsWith('.exe')) return accessAsync(filePath, ExecutableFlag);
+    if (win32NativeExecutableExtensionFilter.has(ext)) return accessAsync(filePath, ExecutableFlag);
     else return Promise.reject(new Error('Not a native executable extension on win32: ' + filePath));
   } else {
     if (filePath.endsWith('/')) {
       // noted that we got ".../CMakeFiles/" a lot. I assume the slash means directory.
       return Promise.reject(new Error('It is a directory, not a native executable: ' + filePath));
     }
-    if (nativeExacutableExtensionFilter.has(ext)) {
+    if (nativeExecutableExtensionFilter.has(ext)) {
       return Promise.reject(new Error('Not a native executable (filtered because of its extension): ' + filePath));
     } else {
       return accessAsync(filePath, ExecutableFlag);

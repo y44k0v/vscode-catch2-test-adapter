@@ -1,7 +1,3 @@
-// -----------------------------------------------------------------------------
-// vscode-catch2-test-adapter was written by Mate Pek, and is placed in the
-// public domain. The author hereby disclaims copyright to this source code.
-
 import * as path from 'path';
 import * as assert from 'assert';
 import { TestAdapter, Imitation, settings } from './Common';
@@ -9,14 +5,13 @@ import { TestAdapter, Imitation, settings } from './Common';
 ///
 
 describe(path.basename(__filename), function() {
-  this.slow(500);
+  this.timeout(5000);
+  this.slow(1000);
 
   let imitation: Imitation;
   let adapter: TestAdapter;
 
   before(async function() {
-    this.timeout(4000);
-
     imitation = new Imitation();
     await settings.resetConfig();
   });

@@ -1,25 +1,12 @@
-//-----------------------------------------------------------------------------
-// vscode-catch2-test-adapter was written by Mate Pek, and is placed in the
-// public domain. The author hereby disclaims copyright to this source code.
-
 import * as assert from 'assert';
 import * as path from 'path';
 import * as fse from 'fs-extra';
 
 describe(path.basename(__filename), function() {
-  it('package.json: executables should be consistent', function() {
-    // definitions/$ref combo doesn't work in case of vscode :(
+  it('package.json: main should be "out/dist/main.js"', function() {
+    // this check is necessary because for development sometimes I change it.
     const packageJson = fse.readJSONSync(path.join(__dirname, '../..', 'package.json'));
-    const executables = packageJson['contributes']['configuration']['properties'][
-      'catch2TestExplorer.executables'
-    ] as any; // eslint-disable-line
-
-    const executableSchema = executables['oneOf'][0]['items']['oneOf'] as [];
-    assert.strictEqual(executableSchema.length + 1, executables['oneOf'].length);
-
-    for (let i = 0; i < executableSchema.length; ++i) {
-      assert.deepStrictEqual(executableSchema[i], executables['oneOf'][i + 1]);
-    }
+    assert.strictEqual(packageJson['main'], 'out/dist/main.js');
   });
 
   it('package.json should be consistent with README.md', function() {
@@ -32,7 +19,7 @@ describe(path.basename(__filename), function() {
       if (match) {
         return match[1].trim();
       }
-      throw new Error('couldnt find: ' + name);
+      throw new Error("couldn't find: " + name);
     };
     {
       const executableSchemaProp = properties['catch2TestExplorer.executables']['oneOf'][0]['items']['oneOf'][0][
@@ -42,15 +29,30 @@ describe(path.basename(__filename), function() {
       keys.forEach(key => {
         assert.strictEqual(findDescriptionInReadmeTable(key), executableSchemaProp[key]['description']);
       });
+
+      {
+        assert.deepStrictEqual(executableSchemaProp['catch2'], executableSchemaProp['gtest']);
+        assert.deepStrictEqual(executableSchemaProp['catch2'], executableSchemaProp['doctest']);
+
+        const catch2Prop = executableSchemaProp['catch2']['properties'];
+        const keys = Object.keys(catch2Prop);
+        keys.forEach(key => {
+          assert.strictEqual(findDescriptionInReadmeTable(key), catch2Prop[key]['description']);
+        });
+      }
     }
     {
       const keys = Object.keys(properties);
 
       keys.forEach(key => {
-        if (key === 'catch2TestExplorer.logfile') {
-          // skip
+        if (key === 'catch2TestExplorer.logfile' || key === 'catch2TestExplorer.userId') {
+          // skip: not documented
         } else {
-          assert.strictEqual(findDescriptionInReadmeTable(key), properties[key]['markdownDescription'], key);
+          assert.ok(key.startsWith('catch2TestExplorer.'));
+          const trimmedKey = key.substring('catch2TestExplorer.'.length);
+          const descriptionInReadme = findDescriptionInReadmeTable(trimmedKey);
+          assert.strictEqual(descriptionInReadme, properties[key]['markdownDescription'], key);
+          assert.strictEqual(descriptionInReadme, properties[key]['description'], key);
         }
       });
     }

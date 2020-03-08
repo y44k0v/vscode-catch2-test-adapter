@@ -1,7 +1,3 @@
-//-----------------------------------------------------------------------------
-// vscode-catch2-test-adapter was written by Mate Pek, and is placed in the
-// public domain. The author hereby disclaims copyright to this source code.
-
 import deepStrictEqual = require('deep-equal');
 import * as assert from 'assert';
 import * as cp from 'child_process';
@@ -12,7 +8,8 @@ import * as path from 'path';
 import * as fse from 'fs-extra';
 import { inspect, promisify } from 'util';
 import { EventEmitter } from 'events';
-import { Readable } from 'stream';
+import { Readable, Writable } from 'stream';
+import { ChildProcess } from 'child_process';
 
 import {
   TestEvent,
@@ -35,7 +32,7 @@ export const isWin = process.platform === 'win32';
 assert.notStrictEqual(vscode.workspace.workspaceFolders, undefined);
 assert.equal(vscode.workspace.workspaceFolders!.length, 1);
 
-export const settings = new class {
+export const settings = new (class {
   public constructor() {}
 
   public readonly workspaceFolderUri = vscode.workspace.workspaceFolders![0].uri;
@@ -70,15 +67,21 @@ export const settings = new class {
     });
     return new Promise(r => t.then(r));
   }
-}();
+})();
+
+export const globalExpectedLoggedErrorLine = new Set<string>();
+
+export function expectedLoggedErrorLine(errorLine: string) {
+  globalExpectedLoggedErrorLine.add(errorLine);
+}
 
 export async function waitFor(context: Mocha.Context, condition: Function, timeout?: number): Promise<void> {
-  if (timeout === undefined) timeout = context.timeout();
+  if (timeout === undefined) timeout = context.timeout() - 1000 /*need some time for error handling*/;
   const start = Date.now();
   let c = await condition();
   while (!(c = await condition()) && (Date.now() - start < timeout || !context.enableTimeouts()))
     await promisify(setTimeout)(32);
-  assert.ok(c, 'title: ' + (context.test ? context.test.title : '?') + '\ncondition: ' + condition.toString());
+  if (!c) throw Error('in test: ' + (context.test ? context.test.title : '?') + '. Condition: ' + condition.toString());
 }
 
 ///
@@ -127,19 +130,20 @@ export class FileSystemWatcherStub implements vscode.FileSystemWatcher {
 export class Imitation {
   public readonly sinonSandbox = sinon.createSandbox();
 
-  public readonly spawnStub = this.sinonSandbox.stub(cp, 'spawn').named('spawnStub') as sinon.SinonStub<any[], any>; // eslint-disable-line
+  public readonly spawnStub = this.sinonSandbox.stub(cp, 'spawn').named('spawnStub'); // eslint-disable-line
 
   public readonly vsfsWatchStub = this.sinonSandbox
     .stub(vscode.workspace, 'createFileSystemWatcher')
-    .named('vscode.createFileSystemWatcher') as sinon.SinonStub<any[], any>; // eslint-disable-line
+    .named('vscode.createFileSystemWatcher'); // eslint-disable-line
 
-  public readonly fsAccessStub = this.sinonSandbox.stub(fs, 'access').named('access') as sinon.SinonStub<any[], any>; // eslint-disable-line
+  public readonly fsAccessStub = (this.sinonSandbox.stub(fs, 'access').named('access') as unknown) as sinon.SinonStub<
+    [fs.PathLike, string, (err: NodeJS.ErrnoException | null) => void],
+    void
+  >; // eslint-disable-line
 
   public readonly fsReadFileSyncStub = this.sinonSandbox.stub(fs, 'readFileSync').named('fsReadFileSync') as any; // eslint-disable-line
 
-  public readonly vsFindFilesStub = this.sinonSandbox
-    .stub(vscode.workspace, 'findFiles')
-    .named('vsFindFilesStub') as sinon.SinonStub<[vscode.GlobPattern | sinon.SinonMatcher], Thenable<vscode.Uri[]>>;
+  public readonly vsFindFilesStub = this.sinonSandbox.stub(vscode.workspace, 'findFiles').named('vsFindFilesStub');
 
   public constructor() {
     this.resetToCallThrough();
@@ -169,16 +173,25 @@ export class Imitation {
     return this.createVscodeRelativePatternMatcher(path.relative(settings.workspaceFolderUri.fsPath, p));
   }
 
-  public handleAccessFileExists(path: string, flag: number, cb: (err: NodeJS.ErrnoException | null) => void): void {
+  public handleAccessFileExists(
+    path: fse.PathLike,
+    flag: string,
+    cb: (err: NodeJS.ErrnoException | null) => void,
+  ): void {
     cb(null);
   }
 
-  public handleAccessFileNotExists(path: string, cb: (err: NodeJS.ErrnoException | null | {}) => void): void {
+  public handleAccessFileNotExists(
+    path: fse.PathLike,
+    flag: string,
+    cb: (err: NodeJS.ErrnoException | null) => void,
+  ): void {
     cb({
+      name: 'errname',
       code: 'ENOENT',
       errno: -2,
       message: 'ENOENT',
-      path: path,
+      path: path.toString(),
       syscall: 'stat',
     });
   }
@@ -186,18 +199,18 @@ export class Imitation {
   public createCreateFSWatcherHandler(
     watchers: Map<string, FileSystemWatcherStub>,
   ): (
-    p: vscode.RelativePattern,
-    ignoreCreateEvents: boolean,
-    ignoreChangeEvents: boolean,
-    ignoreDeleteEvents: boolean,
+    p: vscode.GlobPattern,
+    ignoreCreateEvents?: boolean | undefined,
+    ignoreChangeEvents?: boolean | undefined,
+    ignoreDeleteEvents?: boolean | undefined,
   ) => FileSystemWatcherStub {
     return (
-      p: vscode.RelativePattern,
-      ignoreCreateEvents: boolean,
-      ignoreChangeEvents: boolean,
-      ignoreDeleteEvents: boolean,
+      p: vscode.GlobPattern,
+      ignoreCreateEvents?: boolean | undefined,
+      ignoreChangeEvents?: boolean | undefined,
+      ignoreDeleteEvents?: boolean | undefined,
     ) => {
-      const pp = path.join(p.base, p.pattern);
+      const pp = typeof p === 'string' ? p : path.join(p.base, p.pattern);
       const e = new FileSystemWatcherStub(
         vscode.Uri.file(pp),
         ignoreCreateEvents,
@@ -301,16 +314,39 @@ export class TestAdapter extends my.TestAdapter {
     const i = this.testStatesEvents.findIndex(
       (v: TestRunStartedEvent | TestRunFinishedEvent | TestSuiteEvent | TestEvent) => deepStrictEqual(searchFor, v),
     );
-    assert.ok(0 <= i, 'getTestStatesEventIndex failed to find: ' + inspect(this.testStatesEvents));
+    assert.ok(
+      0 <= i,
+      'getTestStatesEventIndex failed to find: ' +
+        inspect(searchFor, false, 1) +
+        '\nin:\n' +
+        inspect(this.testStatesEvents, false, 2),
+    );
     return i;
+  }
+
+  public testStateEventIndexLess(
+    less: TestRunStartedEvent | TestRunFinishedEvent | TestSuiteEvent | TestEvent,
+    thanThis: TestRunStartedEvent | TestRunFinishedEvent | TestSuiteEvent | TestEvent,
+  ): void {
+    const l = this.getTestStatesEventIndex(less);
+    const r = this.getTestStatesEventIndex(thanThis);
+    assert.ok(l < r, 'testStateEventIndexLess: ' + inspect({ less: [l, less], thanThis: [r, thanThis] }));
   }
 
   public async doAndWaitForReloadEvent(context: Mocha.Context, action: Function): Promise<TestSuiteInfo | undefined> {
     const origCount = this.testLoadsEvents.length;
-    await action();
-    await waitFor(context, () => {
-      return this.testLoadsEvents.length >= origCount + 2;
-    });
+    try {
+      await action();
+    } catch (e) {
+      throw Error('action: "' + action.toString() + '" errored: ' + e.toString());
+    }
+    try {
+      await waitFor(context, () => {
+        return this.testLoadsEvents.length >= origCount + 2;
+      });
+    } catch (e) {
+      throw Error('waiting after action: "' + action.toString() + '" errored: ' + e.toString());
+    }
     assert.equal(this.testLoadsEvents.length, origCount + 2, action.toString());
     assert.equal(this.testLoadsEvents[this.testLoadsEvents.length - 1].type, 'finished');
     const e = this.testLoadsEvents[this.testLoadsEvents.length - 1] as TestLoadFinishedEvent;
@@ -325,7 +361,32 @@ export class TestAdapter extends my.TestAdapter {
 
 ///
 
-export class ChildProcessStub extends EventEmitter {
+export class ChildProcessStub extends EventEmitter implements ChildProcess {
+  public readonly stdin: Writable | null = undefined as any; // eslint-disable-line
+  public readonly stdio: [
+    Writable | null, // stdin
+    Readable | null, // stdout
+    Readable | null, // stderr
+    Readable | Writable | null | undefined, // extra
+    Readable | Writable | null | undefined, // extra
+  ] = undefined as any; // eslint-disable-line
+  public readonly pid: number = undefined as any; // eslint-disable-line
+  public readonly connected: boolean = undefined as any; // eslint-disable-line
+
+  // eslint-disable-next-line
+  public send(...args: any[]): boolean {
+    throw Error('methond not implemented');
+  }
+  public disconnect(): void {
+    throw Error('methond not implemented');
+  }
+  public unref(): void {
+    throw Error('methond not implemented');
+  }
+  public ref(): void {
+    throw Error('methond not implemented');
+  }
+
   public readonly stdout: Readable;
   private _stdoutChunks: (string | null)[] = [];
   private _canPushOut: boolean = false;
@@ -334,6 +395,7 @@ export class ChildProcessStub extends EventEmitter {
   private _stderrChunks: (string | null)[] = [];
   private _canPushErr: boolean = false;
   public closed: boolean = false;
+  public killed: boolean = false;
 
   private _writeStdOut(): void {
     while (this._stdoutChunks.length && this._canPushOut)
@@ -377,8 +439,9 @@ export class ChildProcessStub extends EventEmitter {
     });
   }
 
-  public kill(signal?: string): void {
+  public kill(signal?: NodeJS.Signals | number): void {
     if (signal === undefined) signal = 'SIGTERM';
+    this.killed = true;
     this.emit('close', null, signal);
     this.stdout.push(null);
     this.stderr.push(null);

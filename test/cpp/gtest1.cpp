@@ -2,11 +2,11 @@
 //   gtest.cpp libgtest.a -o gtest3
 
 // g++ -g -std=c++17 -isystem googletest/googletest/include -isystem googletest/googlemock/include \
-    -pthread ../vscode-catch2-test-adapter/src/test/cpp/gtest.cpp libgmock.a -o gtest.exe
+    -pthread ../vscode-catch2-test-adapter/test/cpp/gtest.cpp libgmock.a -o gtest.exe
 
 // Google Test
 
-#include "gtest/gtest.h"
+#include "gmock/gmock.h"
 
 GTEST_TEST(TestCas1, test1) {
   //
@@ -25,8 +25,13 @@ GTEST_TEST(TestCas1, DISABLED_test3) {
 }
 
 GTEST_TEST(TestCas1, test4) {
-  GTEST_SKIP();
+  // GMOKC_SKIP();
   ASSERT_TRUE(1 == 1);
+}
+
+GTEST_TEST(TestCas1, test5) {
+  // GMOKC_SKIP();
+  printf("Is True");
 }
 
 GTEST_TEST(TestCas2, test1) {
@@ -37,6 +42,24 @@ GTEST_TEST(TestCas2, test1) {
   EXPECT_NE(1, 1);
   EXPECT_LT(1, 1);
   EXPECT_GT(1, 1);
+  EXPECT_NEAR(1.0f, 1.5f, 0.25f);
+}
+
+GTEST_TEST(TestCas2, test11) {
+  //
+  int one = 1;
+  int two = 2;
+  EXPECT_TRUE(one != one);
+  EXPECT_FALSE(one == one);
+  EXPECT_EQ(one, two);
+  EXPECT_NE(one, one);
+  EXPECT_LT(one, one);
+  EXPECT_GT(one, one);
+
+  double a = 1.0;
+  double b = 1.5;
+  double c = 0.25;
+  EXPECT_NEAR(a, b, c);
 }
 
 void magic_func() { ASSERT_TRUE(false); }
@@ -90,6 +113,26 @@ GTEST_TEST(MockTestCase, expect2) {
   foo.Describe(3);
 
   ::testing::Mock::VerifyAndClearExpectations(&foo);
+}
+
+// https://stackoverflow.com/questions/29382157/how-to-test-c-template-class-with-multiple-template-parameters-using-gtest/29382470
+
+template <class T>
+class TestThreeParams : public testing::Test {};
+
+typedef ::testing::Types<std::tuple<float, double, int16_t>,
+                         std::tuple<int64_t, int8_t, float> >
+    Implementations;
+
+TYPED_TEST_CASE(TestThreeParams, Implementations);
+
+TYPED_TEST(TestThreeParams, MaximumTest) {
+  using A = typename std::tuple_element<0, decltype(TypeParam())>::type;
+  using B = typename std::tuple_element<1, decltype(TypeParam())>::type;
+  using C = typename std::tuple_element<2, decltype(TypeParam())>::type;
+
+  EXPECT_TRUE(std::max<A>(A(-5), B(2)) == 5);
+  EXPECT_TRUE(std::max<A>(A(-5), C(5)) == 5);
 }
 
 int main(int argc, char **argv) {

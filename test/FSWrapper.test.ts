@@ -1,7 +1,3 @@
-//-----------------------------------------------------------------------------
-// vscode-catch2-test-adapter was written by Mate Pek, and is placed in the
-// public domain. The author hereby disclaims copyright to this source code.
-
 import * as assert from 'assert';
 import * as cp from 'child_process';
 import { EOL } from 'os';
@@ -194,8 +190,8 @@ describe('ChildProcessFake', function() {
   });
 
   it('should works2', async function() {
-    this.timeout(800);
-    this.slow(600);
+    this.timeout(2000);
+    this.slow(1500);
     const cp = new ChildProcessStub();
     let output = '';
     cp.stdout.on('data', (d: string) => {

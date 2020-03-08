@@ -7,12 +7,310 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.4.1]
+### Changed
+
+- Using `chokidar` instead of `gaze` to track fs changes.
+
+## [2.8.7] - 2020-03-03
+
+Improved logging and some extra error handling.
+
+## [2.8.6] - 2020-02-22
+
+Improved logging
+
+## [2.8.5] - 2020-02-10
+
+### Fixed
+
+- gutter location if the assertion comes from a different file (ex.: `#include`).
+
+## [2.8.4] - 2020-02-02
+
+### Fixed
+
+- catch2 custom failure parsing
+
+## [2.8.3] - 2020-02-01
+
+### Added
+
+- experimental support to override test framework recognition.
+- experimental Catch2 benchmark support
+
+### Fixed
+
+- doctest exception handling
+
+### Removed 🚫
+
+- `catch2TestExplorer.executables` used as an array cannot contain strings anymore.
+  Example: `[ "*.test.exe" ]` --> `[ { "pattern": "*.test.exe" } ]`
+
+## [2.8.2] - 2020-01-12
+
+### Added
+
+- Some mechanism which prevent to enumerate test for multiple times when the file hasn't changed.
+
+## [2.8.1] - 2020-01-06
+
+### Added
+
+- GoogleTest version detection
+
+## [2.8.0] - 2020-01-05
+
+### Added
+
+- Enhanced variable for `catch2TestExplorer.executables`.
+  From now array indexing is supported like: `${relDirpath[:-1]}`: `a/b/c` => `a/b`
+
+### Removed
+
+- `${base2Filename}` => `${filename[:-2]}`
+- `${ext2Filename}` => `.${filename[-2:-1]}`
+- `${base3Filename}` => `${filename[:-3]}`
+- `${ext3Filename}` => `${filename[-3:-2]}`
+- `${parentDirname}` => `${relPath[-1:]}`
+
+## [2.7.15] - 2019-12-30
+
+Just some logging related fixes, nothing interesting.
+
+## [2.7.14] - 2019-12-24
+
+## Fixed:
+
+- Catch2 parsing bug
+
+## [2.7.13] - 2019-12-23
+
+## [2.7.12] - 2019-12-22
+
+Nothing interesting:
+
+- npm update
+- logging framework usage
+- slightly more flexible Catch2 test list parsing.
+
+## [2.7.11] - 2019-12-18
+
+## [2.7.10] - 2019-12-18
+
+Sentry fix: webpack caused it.
+
+## [2.7.9] - 2019-12-17
+
+### Added
+
+- experimental support for [doctest](https://github.com/onqtam/doctest) version >= 2.3.6
+
+## [2.7.8] - 2019-12-08
+
+Finally I decided to use webpack. Package is the fraction of the previous version and loading time is faster.
+
+### Fixed
+
+- Catch2 parsing errors.
+
+## [2.7.7] - 2019-12-06
+
+### Changed
+
+- Google Test parsing improvements
+
+### Fixed
+
+- a bug related to bactick in SECTION name
+
+## [2.7.6] - 2019-10-30
+
+### Changed
+
+- Catch2 output information format has been changed. (Hopefully a bit more readable.)
+
+## [2.7.5] - 2019-09-17
+
+Logging improvements.
+
+## [2.7.4] - 2019-09-16
+
+Logging improvements.
+
+## [2.7.3] - 2019-09-09
+
+Logging improvements.
+
+## [2.7.2] - 2019-09-08
+
+⚠️ Sentry.io integration: From this build errors and exceptions can be reported automatically.
+Please allow it by setting `catch2TestExplorer.logSentry: "enable"`.
+
+### Changed
+
+- `debugConfigTemplate` now filters `launch.json` a bit more precisely
+
+## [2.7.1] - 2019-08-30
+
+Nothing really changed (just slightly), but documentation was updated.
+
+## [2.7.0] - 2019-08-25
+
+Fixing vulnerabilites in packages.
+
+### Changed
+
+- Resolving `${os_env:<varname>}` will result in empty string if if `<varname>` is not set.
+  Use `${os_env_strict:<varname>}` which will not set the target variable if there is no `<varname>` environment variable.
+
+## [2.6.6] - 2019-08-02
+
+### Changed
+
+- `catch2TestExplorer.workerMaxNumber` now "really" applies for the test exploration phase too
+
+## [2.6.5] - 2019-08-02
+
+### Changed
+
+- `catch2TestExplorer.workerMaxNumber` now applies for the test exploration phase too
+
+## [2.6.4] - 2019-07-19
+
+### Fixed
+
+- The path is relative to the test file. If the source file is already open vscode would open it another time using the unnormalized file path.
+
+### Changed
+
+- Updated googletest links.
+
+## [2.6.3] - 2019-07-15
+
+### Added
+
+- `catch2TestExplorer.retireDebounceTimeMilisec` to the configs.
+
+## [2.6.2] - 2019-07-13
+
+Fixed security vulnerability.
+
+## [2.6.1] - 2019-07-08
+
+### Added
+
+- `catch2TestExplorer.executables`'s `pattern` resolves variables related to the process's environment variables (Ex.: `${os_env:PATH}`).
+
+## [2.6.0] - 2019-07-08
+
+### Added
+
+- `catch2TestExplorer.defaultExecParsingTimeoutSec` to the configs.
+
+## [2.5.0] - 2019-06-26
+
+### Added
+
+- `catch2TestExplorer.googletest.gmockVerbose` to the configs.
+- `catch2TestExplorer.googletest.treatGmockWarningAs` to the configs.
+
+## [2.4.14] - 2019-06-13
+
+### Added
+
+- `executables`'s properties can contains variables related to environment variables (ex.: `${os_env:PATH};/mypath`).
+
+## [2.4.13] - 2019-06-08
+
+npm update: security alert fix.
+
+## [2.4.12] - 2019-06-07
+
+"Google Test improvements. Now I use my product, so I've found a lot a of small issues." Vol. 2.
+
+### Changed
+
+- Google Mock output parsing enhancements.
+
+### Fixed
+
+- a [bug](https://github.com/matepek/vscode-catch2-test-adapter/issues/97) related to config retrieval.
+
+## [2.4.11] - 2019-06-06
+
+### Added
+
+- additional file extensions recognized as valid executable: `.cmd` and `.bat` ([PR](https://github.com/matepek/vscode-catch2-test-adapter/pull/96))
+
+## [2.4.10] - 2019-06-05
+
+Google Test improvements. Now I use my product, so I've found a lot a of small issues. :)
+
+### Fixed
+
+- Google Test was losing it's state when the exec was touched.
+- a bug which ignored the user and global config values.
+
+### Added
+
+- a logic which tries to create a debug template on the fly.
+  It searches for configurations in the workspacefolder's `.vscode/launch.json`.
+  It will choose the first one which's `"request"` property is `"launch"` and has `type` property.
+
+## [2.4.9] - 2019-05-28
+
+Just updated the README.md and updated the packages.
+
+## [2.4.8] - 2019-05-17
+
+### Fixed
+
+- a [bug](https://github.com/matepek/vscode-catch2-test-adapter/issues/92) related to parsing a Google Test with 'TypeParam'.
+
+## [2.4.7] - 2019-05-01
+
+### Fixed
+
+- a [bug](https://github.com/matepek/vscode-catch2-test-adapter/issues/88) which occured when the test executables crashed on windows.
+
+## [2.4.6] - 2019-04-27
+
+### Fixed
+
+- a misleading default config.
+
+## [2.4.5] - 2019-04-26
+
+### Fixed
+
+- a [bug](https://github.com/matepek/vscode-catch2-test-adapter/issues/88) which reloads the suite in case of the test crashes.
+
+## [2.4.4] - 2019-04-16
+
+### Fixed
+
+- some vulnerabilities in packages (npm audit fix)
+
+## [2.4.3] - 2019-04-03
+
+### Fixed
+
+- section info in description
+
+## [2.4.2] - 2019-04-02
+
+### Fixed
+
+- some issue with `dependsOn` related to `Gaze` fs-watcher.
+
+## [2.4.1] - 2019-04-02
 
 ### Added
 
 - `executables`'s `dependOn` (type: _string[]_) property is no longer experimental.
   Be careful with it. It eats [file descriptors](https://en.wikipedia.org/wiki/File_descriptor) and defecates test executions.
+- section result stat to description and tooltip.
 
 ## [2.4.0] - 2019-03-25
 
@@ -129,7 +427,7 @@ Stability improvements.
 
 ## [2.3.16] - 2019-01-31
 
-This version probalby contains stability imporvements ✌️, but in case it doesn't work on all platforms as I expect,
+This version probably contains stability improvements ✌️, but in case it doesn't work on all platforms as I expect,
 you can downgrade it in the vscode's extension manager and please file an issue about the bug. 🙏
 
 **REMARK**: A list of non-executable extensions are hard-coded: `['py', 'sh', 'cmake', 'deb', 'o', 'so', 'rpm', 'tar', 'gz', 'php', 'ko']`.
@@ -137,7 +435,7 @@ And on Windows everything is filtered what is not ends with `.exe`;
 
 ### Added
 
-- sending `SIGKILL` in case of second cancel. (Clicking onto the cancel button after the first cancel wasn's succesful.)
+- sending `SIGKILL` in case of second cancel. (Clicking onto the cancel button after the first cancel wasn't successful.)
 
 ## [2.3.15] - 2019-01-20
 
@@ -166,11 +464,11 @@ Google Test tests are grouped.
 
 ## [2.3.11] - 2019-01-11
 
-Performance and stability impovements.
+Performance and stability improvements.
 
 ## [2.3.10] - 2019-01-05
 
-Performance and stability impovements.
+Performance and stability improvements.
 
 ## [2.3.9] - 2019-01-03
 
@@ -349,7 +647,7 @@ Lot of things new under the hood, but lets talk about the 'API' change.
 
 - Renamed `defaultExecWatchTimeout` --> `defaultWatchTimeoutSec`.
 
-  - Also the unit has changed from milisecond to **second**.
+  - Also the unit has changed from millisecond to **second**.
 
 - Renamed `debugConfigurationTemplate` --> `debugConfigTemplate`.
 - Renamed `path` property of `executables` --> `pattern`. (Technically `path` still can be used as an alias.)
@@ -366,7 +664,7 @@ Lot of things new under the hood, but lets talk about the 'API' change.
   - `[]` to declare a range of characters to match (e.g., `example.[0-9]` to match on example.0, example.1, …)
 
 - File system is watched through the previously mentioned pattern (only inside the _workspace directory_), and
-  newly created executables will be added automtically, deleted ones will be removed and changed ones will be refresed.
+  newly created executables will be added automatically, deleted ones will be removed and changed ones will be refreshed.
 
 - Variable substitution has been changed. (See [README](README.md) for details.)
 
@@ -420,7 +718,7 @@ Bugfix release
 
 - Skipped tests are recognised.
 - `catch2TestExplorer.workerMaxNumber`, see Changed section.
-- Tricky test names (with spaces in it) are handeld.
+- Tricky test names (with spaces in it) are handled.
 
 ### Changed
 
@@ -429,7 +727,7 @@ Bugfix release
 ### Removed
 
 - `catch2TestExplorer.defaultGroupFileLevelRun` was removed. Now just group file level run exists.
-- Thats why `catch2TestExplorer.defaultWorkerMaxNumberPerFile` was unnecesary too, removed.
+- Thats why `catch2TestExplorer.defaultWorkerMaxNumberPerFile` was unnecessary too, removed.
 - And also `catch2TestExplorer.executables`'s `workerMaxNumber` was removed.
 - `catch2TestExplorer.globalWorkerMaxNumber`, see Changed section.
 

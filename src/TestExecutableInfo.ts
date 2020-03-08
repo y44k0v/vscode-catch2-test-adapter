@@ -1,7 +1,3 @@
-//-----------------------------------------------------------------------------
-// vscode-catch2-test-adapter was written by Mate Pek, and is placed in the
-// public domain. The author hereby disclaims copyright to this source code.
-
 import * as path from 'path';
 import { promisify } from 'util';
 import * as vscode from 'vscode';
@@ -9,25 +5,40 @@ import * as vscode from 'vscode';
 import { RootTestSuiteInfo } from './RootTestSuiteInfo';
 import { AbstractTestSuiteInfo } from './AbstractTestSuiteInfo';
 import * as c2fs from './FSWrapper';
-import { resolveVariables } from './Util';
+import { resolveVariables, resolveOSEnvironmentVariables, ResolveRulePair } from './Util';
 import { TestSuiteInfoFactory } from './TestSuiteInfoFactory';
 import { SharedVariables } from './SharedVariables';
 import { VSCFSWatcherWrapper, FSWatcher, ChokidarWrapper } from './FSWatcher';
+
+export interface TestExecutableInfoFrameworkSpecific {
+  helpRegex?: string;
+  additionalRunArguments?: string[];
+  ignoreTestEnumerationStdErr?: boolean;
+}
 
 export class TestExecutableInfo implements vscode.Disposable {
   public constructor(
     private readonly _shared: SharedVariables,
     private readonly _rootSuite: RootTestSuiteInfo,
-    private readonly _name: string | undefined,
-    private readonly _description: string | undefined,
     private readonly _pattern: string,
-    private readonly _defaultCwd: string,
+    name: string | undefined,
+    description: string | undefined,
     private readonly _cwd: string | undefined,
-    private readonly _defaultEnv: { [prop: string]: string },
     private readonly _env: { [prop: string]: string } | undefined,
-    private readonly _variableToValue: [string, string][],
     private readonly _dependsOn: string[],
-  ) {}
+    private readonly _defaultCwd: string,
+    private readonly _defaultEnv: { [prop: string]: string },
+    private readonly _variableToValue: ResolveRulePair[],
+    private readonly _catch2: TestExecutableInfoFrameworkSpecific,
+    private readonly _gtest: TestExecutableInfoFrameworkSpecific,
+    private readonly _doctest: TestExecutableInfoFrameworkSpecific,
+  ) {
+    this._name = name !== undefined ? name : '${filename}';
+    this._description = description !== undefined ? description : '${relDirpath}/';
+  }
+
+  private readonly _name: string;
+  private readonly _description: string;
 
   private _disposables: vscode.Disposable[] = [];
 
@@ -42,12 +53,13 @@ export class TestExecutableInfo implements vscode.Disposable {
   public async load(): Promise<void> {
     const pattern = this._patternProcessor(this._pattern);
 
-    this._shared.log.info('pattern', pattern);
+    this._shared.log.info('pattern', this._pattern, this._shared.workspaceFolder.uri.fsPath, pattern);
 
     if (pattern.isAbsolute && pattern.isPartOfWs)
-      this._shared.log.warn('Absolute path is used for workspace directory. This is unnecessary, but it should work.');
+      this._shared.log.info('Absolute path is used for workspace directory. This is unnecessary, but it should work.');
 
-    if (this._pattern.indexOf('\\') != -1) this._shared.log.warn('Pattern contains backslash character.');
+    if (this._pattern.indexOf('\\') != -1)
+      this._shared.log.info('Pattern contains backslash character. Try to avoid that.');
 
     let filePaths: string[] = [];
 
@@ -61,7 +73,11 @@ export class TestExecutableInfo implements vscode.Disposable {
 
       filePaths = await execWatcher.watched();
 
-      execWatcher.onError((err: Error) => this._shared.log.error('watcher error:', err));
+      execWatcher.onError((err: Error) => {
+        // eslint-disable-next-line
+        if ((err as any).code == 'ENOENT') this._shared.log.info('watcher error', err);
+        else this._shared.log.error('watcher error', err);
+      });
 
       execWatcher.onAll(fsPath => {
         this._shared.log.info('watcher event:', fsPath);
@@ -73,7 +89,7 @@ export class TestExecutableInfo implements vscode.Disposable {
       execWatcher && execWatcher.dispose();
       filePaths.push(this._pattern);
 
-      this._shared.log.error("Coudn't watch pattern", e);
+      this._shared.log.exception(e, "Coudn't watch pattern");
     }
 
     const suiteCreationAndLoadingTasks: Promise<void>[] = [];
@@ -87,7 +103,7 @@ export class TestExecutableInfo implements vscode.Disposable {
           () => {
             return this._createSuiteByUri(file).then(
               (suite: AbstractTestSuiteInfo) => {
-                return suite.reloadChildren().then(
+                return suite.reloadTests(this._shared.taskPool).then(
                   () => {
                     if (this._rootSuite.insertChild(suite, false /* called later */)) {
                       this._executables.set(file, suite);
@@ -99,12 +115,12 @@ export class TestExecutableInfo implements vscode.Disposable {
                 );
               },
               (reason: Error) => {
-                this._shared.log.warn('Not a test executable:', file, 'reason:', reason);
+                this._shared.log.debug('Not a test executable:', file, 'reason:', reason);
               },
             );
           },
           (reason: Error) => {
-            this._shared.log.info('Not an executable:', file, reason);
+            this._shared.log.debug('Not an executable:', file, reason);
           },
         ),
       );
@@ -121,13 +137,14 @@ export class TestExecutableInfo implements vscode.Disposable {
 
         for (const pattern of this._dependsOn) {
           const p = this._patternProcessor(pattern);
+
           if (p.isPartOfWs) {
             const w = new VSCFSWatcherWrapper(this._shared.workspaceFolder, p.relativeToWsPosix);
             this._disposables.push(w);
 
-            w.onError((e: Error) => this._shared.log.error('dependsOn watcher:', e, p));
+            w.onError((e: Error): void => this._shared.log.error('dependsOn watcher:', e, p));
 
-            w.onAll(fsPath => {
+            w.onAll((fsPath: string): void => {
               this._shared.log.info('dependsOn watcher event:', fsPath);
               this._shared.retire.fire([...this._executables.values()]);
             });
@@ -140,9 +157,9 @@ export class TestExecutableInfo implements vscode.Disposable {
           const w = new ChokidarWrapper(absPatterns);
           this._disposables.push(w);
 
-          w.onError((e: Error) => this._shared.log.error('dependsOn watcher:', e, absPatterns));
+          w.onError((e: Error): void => this._shared.log.error('dependsOn watcher:', e, absPatterns));
 
-          w.onAll(fsPath => {
+          w.onAll((fsPath: string): void => {
             this._shared.log.info('dependsOn watcher event:', fsPath);
             this._shared.retire.fire([...this._executables.values()]);
           });
@@ -162,6 +179,7 @@ export class TestExecutableInfo implements vscode.Disposable {
     isPartOfWs: boolean;
     relativeToWsPosix: string;
   } {
+    pattern = resolveOSEnvironmentVariables(pattern, false);
     const isAbsolute = path.isAbsolute(pattern);
     const absPattern = isAbsolute
       ? vscode.Uri.file(path.normalize(pattern)).fsPath
@@ -180,77 +198,86 @@ export class TestExecutableInfo implements vscode.Disposable {
   private _createSuiteByUri(filePath: string): Promise<AbstractTestSuiteInfo> {
     const relPath = path.relative(this._shared.workspaceFolder.uri.fsPath, filePath);
 
-    let varToValue: [string, string][] = [];
+    let varToValue: ResolveRulePair[] = [];
+
+    const subPath = (pathStr: string) => {
+      const pathArray = pathStr.split(/\/|\\/);
+      return (m: RegExpMatchArray) => {
+        const idx1 = m[1] === undefined ? undefined : Number(m[1]);
+        const idx2 = m[2] === undefined ? undefined : Number(m[2]);
+
+        return path.normalize(pathArray.slice(idx1, idx2).join(path.sep));
+      };
+    };
+
+    const subFilename = (filename: string) => {
+      const filenameArray = filename.split('.');
+      return (m: RegExpMatchArray) => {
+        const idx1 = m[1] === undefined ? undefined : Number(m[1]);
+        const idx2 = m[2] === undefined ? undefined : Number(m[2]);
+
+        return filenameArray.slice(idx1, idx2).join('.');
+      };
+    };
+
     try {
       const filename = path.basename(filePath);
       const extFilename = path.extname(filename);
       const baseFilename = path.basename(filename, extFilename);
-      const ext2Filename = path.extname(baseFilename);
-      const base2Filename = path.basename(baseFilename, ext2Filename);
-      const ext3Filename = path.extname(base2Filename);
-      const base3Filename = path.basename(base2Filename, ext3Filename);
 
       varToValue = [
         ...this._variableToValue,
-        ['${absPath}', filePath],
-        ['${relPath}', relPath],
-        ['${absDirpath}', path.dirname(filePath)],
-        ['${relDirpath}', path.dirname(relPath)],
-        ['${filename}', filename],
-        ['${parentDirname}', path.basename(path.dirname(filePath))],
+        [/\${absPath(?:\[(-?[0-9]+)?:(-?[0-9]+)?\])?}/, subPath(filePath)],
+        [/\${relPath(?:\[(-?[0-9]+)?:(-?[0-9]+)?\])?}/, subPath(relPath)],
+        [/\${absDirpath(?:\[(-?[0-9]+)?:(-?[0-9]+)?\])?}/, subPath(path.dirname(filePath))],
+        [/\${relDirpath(?:\[(-?[0-9]+)?:(-?[0-9]+)?\])?}/, subPath(path.dirname(relPath))],
+        [/\${filename(?:\[(-?[0-9]+)?:(-?[0-9]+)?\])?}/, subFilename(filename)],
         ['${extFilename}', extFilename],
         ['${baseFilename}', baseFilename],
-        ['${ext2Filename}', ext2Filename],
-        ['${base2Filename}', base2Filename],
-        ['${ext3Filename}', ext3Filename],
-        ['${base3Filename}', base3Filename],
       ];
     } catch (e) {
-      this._shared.log.error(e);
+      this._shared.log.exception(e);
     }
+
+    const variableRe = /\$\{[^ ]*\}/;
 
     let resolvedName = relPath;
     try {
-      if (this._name) resolvedName = resolveVariables(this._name, varToValue);
-      else if (!this._description) resolvedName = resolveVariables('${filename}', varToValue);
+      resolvedName = resolveVariables(this._name, varToValue);
+      resolvedName = resolveOSEnvironmentVariables(resolvedName, false);
 
-      if (resolvedName.match(/\$\{.*\}/)) this._shared.log.warn('Possibly unresolved variable: ' + resolvedName);
+      if (resolvedName.match(variableRe)) this._shared.log.warn('Possibly unresolved variable', resolvedName);
 
       varToValue.push(['${name}', resolvedName]);
     } catch (e) {
       this._shared.log.error('resolvedLabel', e);
     }
 
-    let resolvedDescription: string | undefined = undefined;
+    let resolvedDescription = '';
     try {
-      if (this._description) {
-        resolvedDescription = resolveVariables(this._description, varToValue);
+      resolvedDescription = resolveVariables(this._description, varToValue);
+      resolvedDescription = resolveOSEnvironmentVariables(resolvedDescription, false);
 
-        if (resolvedDescription.match(/\$\{.*\}/))
-          this._shared.log.warn('Possibly unresolved variable: ' + resolvedDescription);
+      if (resolvedDescription.match(variableRe))
+        this._shared.log.warn('Possibly unresolved variable', resolvedDescription);
 
-        varToValue.push(['${description}', resolvedDescription]);
-      } else if (!this._name) {
-        resolvedDescription = resolveVariables('${relDirpath}/', varToValue);
-        varToValue.push(['${description}', resolvedDescription]);
-      } else {
-        varToValue.push(['${description}', '']);
-      }
+      varToValue.push(['${description}', resolvedDescription]);
     } catch (e) {
       this._shared.log.error('resolvedDescription', e);
     }
 
-    let resolvedCwd = this._defaultCwd;
+    let resolvedCwd = '.';
     try {
-      if (this._cwd) resolvedCwd = this._cwd;
+      if (this._cwd) resolvedCwd = resolveVariables(this._cwd, varToValue);
+      else resolvedCwd = resolveVariables(this._defaultCwd, varToValue);
 
-      resolvedCwd = resolveVariables(resolvedCwd, varToValue);
+      resolvedCwd = resolveOSEnvironmentVariables(resolvedCwd, false);
 
-      if (resolvedCwd.match(/\$\{.*\}/)) this._shared.log.warn('Possibly unresolved variable: ' + resolvedCwd);
+      if (resolvedCwd.match(variableRe)) this._shared.log.warn('Possibly unresolved variable', resolvedCwd);
 
       resolvedCwd = path.resolve(this._shared.workspaceFolder.uri.fsPath, resolvedCwd);
 
-      varToValue.push(['${cwd}', resolvedCwd]);
+      varToValue.push([/\${cwd(?:\[(-?[0-9]+)?:(-?[0-9]+)?\])?}/, subPath(resolvedCwd)]);
     } catch (e) {
       this._shared.log.error('resolvedCwd', e);
     }
@@ -262,14 +289,24 @@ export class TestExecutableInfo implements vscode.Disposable {
       if (this._env) Object.assign(resolvedEnv, this._env);
 
       resolvedEnv = resolveVariables(resolvedEnv, varToValue);
+      resolvedEnv = resolveOSEnvironmentVariables(resolvedEnv, true);
     } catch (e) {
       this._shared.log.error('resolvedEnv', e);
     }
 
-    return new TestSuiteInfoFactory(this._shared, resolvedName, resolvedDescription, filePath, {
-      cwd: resolvedCwd,
-      env: resolvedEnv,
-    }).create();
+    return new TestSuiteInfoFactory(
+      this._shared,
+      resolvedName,
+      resolvedDescription,
+      filePath,
+      {
+        cwd: resolvedCwd,
+        env: Object.assign({}, process.env, resolvedEnv),
+      },
+      this._catch2,
+      this._gtest,
+      this._doctest,
+    ).create();
   }
 
   private _handleEverything(filePath: string): void {
@@ -302,7 +339,7 @@ export class TestExecutableInfo implements vscode.Disposable {
         return new Promise<void>((resolve, reject) => {
           this._shared.loadWithTaskEmitter.fire(() => {
             return suite
-              .reloadChildren()
+              .reloadTests(this._shared.taskPool)
               .then(() => {
                 if (this._rootSuite.insertChild(suite, true)) {
                   this._executables.set(filePath, suite);
@@ -313,33 +350,34 @@ export class TestExecutableInfo implements vscode.Disposable {
               .then(resolve, reject);
           });
         }).catch((reason: Error) => {
-          this._shared.log.warn('Problem under reloadChildren:', reason, filePath, suite);
+          this._shared.log.debug(reason, filePath, suite);
+          // eslint-disable-next-line
+          if ((reason as any).code === undefined) this._shared.log.warn('problem under reloading', reason);
           return x(suite, false, Math.min(delay * 2, 2000));
         });
       } else {
         return promisify(setTimeout)(Math.min(delay * 2, 2000)).then(() => {
           return c2fs
             .isNativeExecutableAsync(filePath)
-            .then(() => true, () => false)
+            .then(
+              () => true,
+              () => false,
+            )
             .then(isExec => x(suite, isExec, Math.min(delay * 2, 2000)));
         });
       }
     };
 
-    let suite = this._executables.get(filePath);
+    const suite = this._executables.get(filePath);
 
-    if (suite == undefined) {
-      this._shared.log.info('new suite: ' + filePath);
+    if (suite === undefined) {
+      this._shared.log.info('possibly new suite: ' + filePath);
       this._createSuiteByUri(filePath).then(
-        (s: AbstractTestSuiteInfo) => {
-          x(s, false, 64);
-        },
-        (reason: Error) => {
-          this._shared.log.info("couldn't add: " + filePath, 'reson:', reason);
-        },
+        (s: AbstractTestSuiteInfo) => x(s, false, 64),
+        (reason: Error) => this._shared.log.info("couldn't add: " + filePath, 'reson:', reason),
       );
     } else {
-      x(suite!, false, 64);
+      x(suite, false, 64);
     }
   }
 }

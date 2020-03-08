@@ -1,7 +1,3 @@
-//-----------------------------------------------------------------------------
-// vscode-catch2-test-adapter was written by Mate Pek, and is placed in the
-// public domain. The author hereby disclaims copyright to this source code.
-
 import * as assert from 'assert';
 
 import * as path from 'path';
@@ -30,7 +26,7 @@ describe(path.basename(__filename), function() {
   });
 
   it('defaultEnv', function() {
-    this.slow(1000);
+    this.slow(1500);
     return adapter.doAndWaitForReloadEvent(this, () => {
       return settings.updateConfig('defaultEnv', { APPLE: 'apple' });
     });
@@ -45,25 +41,25 @@ describe(path.basename(__filename), function() {
 
   it('defaultRngSeed', function() {
     return settings.updateConfig('defaultRngSeed', 987).then(function() {
-      assert.equal((adapter as any /* eslint-disable-line */)._shared.rngSeed, 987);
+      assert.equal((adapter as any) /* eslint-disable-line */._shared.rngSeed, 987);
     });
   });
 
   it('defaultWatchTimeoutSec', function() {
     return settings.updateConfig('defaultWatchTimeoutSec', 9876).then(function() {
-      assert.equal((adapter as any /* eslint-disable-line */)._shared.execWatchTimeout, 9876000);
+      assert.equal((adapter as any) /* eslint-disable-line */._shared.execWatchTimeout, 9876000);
     });
   });
 
   it('defaultRunningTimeoutSec', function() {
     return settings.updateConfig('defaultRunningTimeoutSec', 8765).then(function() {
-      assert.equal((adapter as any /* eslint-disable-line */)._shared.execRunningTimeout, 8765000);
+      assert.equal((adapter as any) /* eslint-disable-line */._shared.execRunningTimeout, 8765000);
     });
   });
 
   it('defaultNoThrow', function() {
     return settings.updateConfig('defaultNoThrow', true).then(function() {
-      assert.equal((adapter as any /* eslint-disable-line */)._shared.isNoThrow, true);
+      assert.equal((adapter as any) /* eslint-disable-line */._shared.isNoThrow, true);
     });
   });
 });
