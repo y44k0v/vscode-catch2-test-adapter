@@ -97,7 +97,7 @@ export class GoogleTestSuiteInfo extends AbstractTestSuiteInfo {
   private _reloadFromStdOut(stdOutStr: string, oldChildren: GoogleTestGroupSuiteInfo[]): void {
     this.children = [];
 
-    let lines = stdOutStr.split(/\r?\n/);
+    const lines = stdOutStr.split(/\r?\n/);
 
     const testGroupRe = /^([A-z][\/A-z0-9_\-]*)\.(?:\s+(#\s+TypeParam(?:\(\))?\s+=\s*(.+)))?$/;
     const testRe = /^\s+([A-z0-9][\/A-z0-9_\-]*)(?:\s+(#\s+GetParam(?:\(\))?\s+=\s*(.+)))?$/;
@@ -218,7 +218,15 @@ export class GoogleTestSuiteInfo extends AbstractTestSuiteInfo {
               type: 'test',
               test: test,
               state: 'errored',
-              message: `❗️Unexpected stderr!\nspawn\nstout:\n${googleTestListOutput.stdout}\nstderr:\n${googleTestListOutput.stderr}`,
+              message: [
+                `❗️Unexpected stderr!`,
+                `(One might can use ignoreTestEnumerationStdErr as the LAST RESORT. Check README for details.)`,
+                `spawn`,
+                `stout:`,
+                `${googleTestListOutput.stdout}`,
+                `stderr:`,
+                `${googleTestListOutput.stderr}`,
+              ].join('\n'),
             },
           ]);
         } else {
@@ -277,11 +285,11 @@ export class GoogleTestSuiteInfo extends AbstractTestSuiteInfo {
 
   protected _handleProcess(runInfo: RunningTestExecutableInfo): Promise<void> {
     const data = new (class {
-      public buffer: string = '';
+      public buffer = '';
       public currentTestCaseNameFull: string | undefined = undefined;
       public currentChild: GoogleTestInfo | undefined = undefined;
       public group: GoogleTestGroupSuiteInfo | undefined = undefined;
-      public beforeFirstTestCase: boolean = true;
+      public beforeFirstTestCase = true;
       public unprocessedTestCases: string[] = [];
       public processedTestCases: GoogleTestInfo[] = [];
     })();

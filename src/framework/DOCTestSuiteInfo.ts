@@ -96,7 +96,13 @@ export class DOCTestSuiteInfo extends AbstractTestSuiteInfo {
       )
       .then(docTestListOutput => {
         if (docTestListOutput.stderr && !this.execInfo.ignoreTestEnumerationStdErr) {
-          this._shared.log.warn('reloadChildren -> docTestListOutput.stderr', docTestListOutput);
+          this._shared.log.warn(
+            'reloadChildren -> docTestListOutput.stderr',
+            docTestListOutput.stdout,
+            docTestListOutput.stderr,
+            docTestListOutput.error,
+            docTestListOutput.status,
+          );
           const test = this.addChild(
             new DOCTestInfo(
               this._shared,
@@ -113,7 +119,15 @@ export class DOCTestSuiteInfo extends AbstractTestSuiteInfo {
               type: 'test',
               test: test,
               state: 'errored',
-              message: `❗️Unexpected stderr!\nspawn\nstout:\n${docTestListOutput.stdout}\nstderr:\n${docTestListOutput.stderr}`,
+              message: [
+                `❗️Unexpected stderr!`,
+                `(One might can use ignoreTestEnumerationStdErr as the LAST RESORT. Check README for details.)`,
+                `spawn`,
+                `stout:`,
+                `${docTestListOutput.stdout}`,
+                `stderr:`,
+                `${docTestListOutput.stderr}`,
+              ].join('\n'),
             },
           ]);
           return Promise.resolve();
@@ -155,10 +169,10 @@ export class DOCTestSuiteInfo extends AbstractTestSuiteInfo {
 
   protected _handleProcess(runInfo: RunningTestExecutableInfo): Promise<void> {
     const data = new (class {
-      public buffer: string = '';
-      public inTestCase: boolean = false;
+      public buffer = '';
+      public inTestCase = false;
       public currentChild: DOCTestInfo | undefined = undefined;
-      public beforeFirstTestCase: boolean = true;
+      public beforeFirstTestCase = true;
       public rngSeed: number | undefined = undefined;
       public unprocessedXmlTestCases: string[] = [];
       public processedTestCases: DOCTestInfo[] = [];

@@ -7,9 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Using `chokidar` instead of `gaze` to track fs changes.
+
+## [2.8.11] - 2020-03-18
+
+npm update
+
+## [2.8.10] - 2020-03-15
+
+README fixes and option to force add `.../_deps/...`.
+
+## [2.8.9] - 2020-03-15
+
 ### Changed
 
+- Ignoring more known extensions and also ignoring `_deps` subfolder.
+  This change might cause a problem for some user but hopefully just makes the test discovery much faster.
+
+## [2.8.8]
 - Using `chokidar` instead of `gaze` to track fs changes.
+### Removed
+
+- Google Test framework experimental discovery.
 
 ## [2.8.7] - 2020-03-03
 
