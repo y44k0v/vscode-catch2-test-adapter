@@ -7,6 +7,14 @@ import { TestAdapter } from './TestAdapter';
 import { LoggerWrapper } from './LoggerWrapper';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  //const logger = new LoggerWrapper('testMate.cpp.log', undefined, `C++ TestMate`);
+
+  //const testProvider = new TestProvider();
+  //vscode.test.registerTestProvider(testProvider);
+  //context.subscriptions.push(testProvider);
+
+  ///
+
   const testExplorerExtension = vscode.extensions.getExtension<TestHub>(testExplorerExtensionId);
 
   if (testExplorerExtension) {

@@ -20,6 +20,7 @@ module.exports = {
     ecmaVersion: 2018,
     sourceType: 'module',
   },
+  ignorePatterns: ['src/@types/vscode*'],
   rules: {
     // Place to specify ESLint rules. Can be used to overwrite rules specified from the extended configs
     // e.g. "@typescript-eslint/explicit-function-return-type": "off",
