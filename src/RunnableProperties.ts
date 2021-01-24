@@ -1,14 +1,14 @@
 import { FrameworkSpecific, RunTask } from './AdvancedExecutableInterface';
 import { TestGrouping } from './TestGroupingInterface';
-import { ResolveRuleAsync } from './util/ResolveRule';
 import { TaskPool } from './util/TaskPool';
 import { Spawner, SpawnOptionsWithoutStdio } from './Spawner';
+import { VariableResolver } from './util/VariableResolver';
 
 export class RunnableProperties {
   public constructor(
     public readonly name: string | undefined,
     public readonly description: string | undefined,
-    public readonly varToValue: readonly ResolveRuleAsync[],
+    public readonly variableResolver: VariableResolver,
     public readonly path: string,
     public readonly options: SpawnOptionsWithoutStdio,
     private readonly _frameworkSpecific: FrameworkSpecific,

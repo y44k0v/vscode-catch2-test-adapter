@@ -6,7 +6,7 @@ import { AbstractRunnable, RunnableReloadResult } from '../AbstractRunnable';
 import { AbstractTest, AbstractTestEvent } from '../AbstractTest';
 import { Suite } from '../Suite';
 import { DOCTest } from './DOCTest';
-import { SharedVariables } from '../SharedVariables';
+import { TestHierarchyShared } from '../TestHierarchy';
 import { RunningRunnable, ProcessResult } from '../RunningRunnable';
 import { RunnableProperties } from '../RunnableProperties';
 import { CancellationFlag, Version } from '../Util';
@@ -19,7 +19,7 @@ interface XmlObject {
 
 export class DOCRunnable extends AbstractRunnable {
   public constructor(
-    shared: SharedVariables,
+    shared: TestHierarchyShared,
     rootSuite: RootSuite,
     execInfo: RunnableProperties,
     docVersion: Version | undefined,
@@ -88,7 +88,7 @@ export class DOCRunnable extends AbstractRunnable {
   protected async _reloadChildren(cancellationFlag: CancellationFlag): Promise<RunnableReloadResult> {
     const cacheFile = this.properties.path + '.TestMate.testListCache.txt';
 
-    if (this._shared.enabledTestListCaching) {
+    if (this._shared.configuration.getEnableTestListCaching()) {
       try {
         const cacheStat = await promisify(fs.stat)(cacheFile);
         const execStat = await promisify(fs.stat)(this.properties.path);
@@ -132,7 +132,7 @@ export class DOCRunnable extends AbstractRunnable {
 
     const result = await this._reloadFromString(docTestListOutput.stdout, cancellationFlag);
 
-    if (this._shared.enabledTestListCaching) {
+    if (this._shared.configuration.getEnableTestListCaching()) {
       promisify(fs.writeFile)(cacheFile, docTestListOutput.stdout).catch(err =>
         this._shared.log.warn('couldnt write cache file:', err),
       );
@@ -152,11 +152,12 @@ export class DOCRunnable extends AbstractRunnable {
     execParams.push('--reporters=xml');
     execParams.push('--duration=true');
 
-    if (this._shared.isNoThrow) execParams.push('--no-throw=true');
+    if (this._shared.configuration.getDefaultNoThrow()) execParams.push('--no-throw=true');
 
-    if (this._shared.rngSeed !== null) {
+    const rngSeed = this._shared.configuration.getRandomGeneratorSeed();
+    if (rngSeed !== null) {
       execParams.push('--order-by=rand');
-      execParams.push('--rand-seed=' + this._shared.rngSeed.toString());
+      execParams.push('--rand-seed=' + rngSeed.toString());
     }
 
     return execParams;

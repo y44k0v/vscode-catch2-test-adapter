@@ -5,7 +5,7 @@ import { Suite } from '../Suite';
 import { AbstractRunnable, RunnableReloadResult } from '../AbstractRunnable';
 import { GoogleBenchmarkTest } from './GoogleBenchmarkTest';
 import { RunnableProperties } from '../RunnableProperties';
-import { SharedVariables } from '../SharedVariables';
+import { TestHierarchyShared } from '../TestHierarchy';
 import { RunningRunnable, ProcessResult } from '../RunningRunnable';
 import { AbstractTest } from '../AbstractTest';
 import { CancellationFlag, Version } from '../Util';
@@ -14,7 +14,7 @@ import { RootSuite } from '../RootSuite';
 
 export class GoogleBenchmarkRunnable extends AbstractRunnable {
   public constructor(
-    shared: SharedVariables,
+    shared: TestHierarchyShared,
     rootSuite: RootSuite,
     execInfo: RunnableProperties,
     version: Promise<Version | undefined>,
@@ -65,7 +65,7 @@ export class GoogleBenchmarkRunnable extends AbstractRunnable {
   protected async _reloadChildren(cancellationFlag: CancellationFlag): Promise<RunnableReloadResult> {
     const cacheFile = this.properties.path + '.TestMate.testListCache.xml';
 
-    if (this._shared.enabledTestListCaching) {
+    if (this._shared.configuration.getEnableTestListCaching()) {
       try {
         const cacheStat = await promisify(fs.stat)(cacheFile);
         const execStat = await promisify(fs.stat)(this.properties.path);
@@ -98,7 +98,7 @@ export class GoogleBenchmarkRunnable extends AbstractRunnable {
       try {
         const result = await this._reloadFromString(listOutput.stdout, cancellationFlag);
 
-        if (this._shared.enabledTestListCaching) {
+        if (this._shared.configuration.getEnableTestListCaching()) {
           promisify(fs.writeFile)(cacheFile, listOutput.stdout).catch(err =>
             this._shared.log.warn('couldnt write cache file:', err),
           );

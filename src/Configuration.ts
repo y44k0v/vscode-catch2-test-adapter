@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { LoggerWrapper } from './LoggerWrapper';
-import { ExecutableConfig } from './ExecutableConfig';
-import { SharedVariables } from './SharedVariables';
+import { ExecutableConfig } from './ExecutableConfigX';
 import { hashString } from './Util';
 import { performance } from 'perf_hooks';
 import { TestGrouping } from './TestGroupingInterface';
@@ -12,6 +11,7 @@ import {
   RunTask,
   ExecutionWrapper,
 } from './AdvancedExecutableInterface';
+import { TestHierarchyShared } from './TestHierarchy';
 //import * as crypto from 'crypto';
 
 type SentryValue = 'question' | 'enable' | 'enabled' | 'disable' | 'disable_1' | 'disable_2' | 'disable_3';
@@ -48,33 +48,33 @@ export type ConfigT =
   | 'gtest.treatGmockWarningAs'
   | 'gtest.gmockVerbose';
 
-// TODO we probably dont need this anymore
-class ConfigurationChangeEvent {
-  public constructor(private readonly event: vscode.ConfigurationChangeEvent) {}
-  affectsConfiguration(config: ConfigT, resource?: vscode.Uri): boolean {
-    return this.event.affectsConfiguration(`${ConfigSectionBase}.${config}`, resource);
-  }
-}
-
-class ConfigurationChangeEventX {
-  public constructor(private readonly resource: vscode.Uri, private readonly event: vscode.ConfigurationChangeEvent) {}
-  public affects(config: ConfigT): boolean {
-    return this.event.affectsConfiguration(`${ConfigSectionBase}.${config}`, this.resource);
-  }
-  public affectsAny(...config: ConfigT[]): boolean {
-    return config.some(c => this.affects(c));
-  }
-}
-
 ///
 
-// TODO rename
-export class Configurations {
+export class Configuration implements vscode.Disposable {
   private _cfg: vscode.WorkspaceConfiguration;
 
-  public constructor(public _log: LoggerWrapper, private _workspaceFolderUri: vscode.Uri) {
+  public constructor(
+    public _log: LoggerWrapper,
+    private _workspaceFolderUri: vscode.Uri,
+    private readonly _shared: TestHierarchyShared,
+  ) {
     this._cfg = vscode.workspace.getConfiguration(ConfigSectionBase, _workspaceFolderUri);
+
+    // TODO we might can generalize this
+    this._configChangedListener = this.onDidChange(changeEvent => {
+      if (changeEvent.affectsAny('test.runtimeLimit', 'discovery.runtimeLimit'))
+        this._execRunningTimeoutChangeEmitter.fire();
+    });
   }
+
+  public dispose(): void {
+    this._configChangedListener.dispose();
+    this._execRunningTimeoutChangeEmitter.dispose();
+  }
+
+  private readonly _configChangedListener: vscode.Disposable;
+  private readonly _execRunningTimeoutChangeEmitter = new vscode.EventEmitter<void>();
+  public readonly onDidChangeExecRunningTimeout = this._execRunningTimeoutChangeEmitter.event;
 
   private _get<T>(section: ConfigT): T | undefined {
     return this._cfg.get<T>(section);
@@ -95,16 +95,9 @@ export class Configurations {
     };
   }
 
-  public onDidChange(callbacks: (changeEvent: ConfigurationChangeEventX) => void): vscode.Disposable {
+  public onDidChange(callbacks: (changeEvent: ConfigurationChangeEvent) => void): vscode.Disposable {
     return vscode.workspace.onDidChangeConfiguration(changeEvent =>
-      callbacks(new ConfigurationChangeEventX(this._workspaceFolderUri, changeEvent)),
-    );
-  }
-
-  // TODO we probably dont need this anymore
-  public static onDidChange(callbacks: (changeEvent: ConfigurationChangeEvent) => void): vscode.Disposable {
-    return vscode.workspace.onDidChangeConfiguration(changeEvent =>
-      callbacks(new ConfigurationChangeEvent(changeEvent)),
+      callbacks(new ConfigurationChangeEvent(this._workspaceFolderUri, changeEvent)),
     );
   }
 
@@ -343,9 +336,9 @@ export class Configurations {
     const res = Math.max(1, this._getD<number>('test.parallelExecutionLimit', 1));
     if (typeof res != 'number') return 1;
     else {
-      if (res > 1 && !Configurations._parallelExecutionLimitMetricSent) {
+      if (res > 1 && !Configuration._parallelExecutionLimitMetricSent) {
         this._log.infoS('Using test.parallelExecutionLimit');
-        Configurations._parallelExecutionLimitMetricSent = true;
+        Configuration._parallelExecutionLimitMetricSent = true;
       }
       return res;
     }
@@ -392,13 +385,13 @@ export class Configurations {
     return this._getD<'default' | 'info' | 'warning' | 'error'>('gtest.gmockVerbose', 'default');
   }
 
-  public getExecutables(shared: SharedVariables): ExecutableConfig[] {
+  public getExecutables(): ExecutableConfig[] {
     const defaultCwd = this.getDefaultCwd() || '${absDirpath}';
     const defaultParallelExecutionOfExecLimit = this.getParallelExecutionOfExecutableLimit() || 1;
 
     const createExecutableConfigFromPattern = (pattern: string): ExecutableConfig => {
       return new ExecutableConfig(
-        shared,
+        this._shared,
         pattern,
         undefined,
         undefined,
@@ -532,7 +525,7 @@ export class Configurations {
             : {};
 
         return new ExecutableConfig(
-          shared,
+          this._shared,
           pattern,
           name,
           description,
@@ -600,4 +593,14 @@ export class Configurations {
   }
 
   //public static readonly PublicKey: string = '';
+}
+
+class ConfigurationChangeEvent {
+  public constructor(private readonly resource: vscode.Uri, private readonly event: vscode.ConfigurationChangeEvent) {}
+  public affects(config: ConfigT): boolean {
+    return this.event.affectsConfiguration(`${ConfigSectionBase}.${config}`, this.resource);
+  }
+  public affectsAny(...config: ConfigT[]): boolean {
+    return config.some(c => this.affects(c));
+  }
 }

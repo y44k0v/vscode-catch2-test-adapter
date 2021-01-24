@@ -6,7 +6,7 @@ import { RunnableProperties } from '../RunnableProperties';
 import { AbstractRunnable, RunnableReloadResult } from '../AbstractRunnable';
 import { Suite } from '../Suite';
 import { Catch2Test } from './Catch2Test';
-import { SharedVariables } from '../SharedVariables';
+import { TestHierarchyShared } from '../TestHierarchy';
 import { RunningRunnable, ProcessResult } from '../RunningRunnable';
 import { AbstractTest, AbstractTestEvent } from '../AbstractTest';
 import { CancellationFlag, Version } from '../Util';
@@ -19,7 +19,7 @@ interface XmlObject {
 
 export class Catch2Runnable extends AbstractRunnable {
   public constructor(
-    shared: SharedVariables,
+    shared: TestHierarchyShared,
     rootSuite: RootSuite,
     execInfo: RunnableProperties,
     private readonly _catch2Version: Version | undefined,
@@ -219,7 +219,7 @@ export class Catch2Runnable extends AbstractRunnable {
   protected async _reloadChildren(cancellationFlag: CancellationFlag): Promise<RunnableReloadResult> {
     const cacheFile = this.properties.path + '.TestMate.testListCache.txt';
 
-    if (this._shared.enabledTestListCaching) {
+    if (this._shared.configuration.getEnableTestListCaching()) {
       try {
         const cacheStat = await promisify(fs.stat)(cacheFile);
         const execStat = await promisify(fs.stat)(this.properties.path);
@@ -275,7 +275,7 @@ export class Catch2Runnable extends AbstractRunnable {
         ? await this._reloadFromXml(catch2TestListOutput.stdout, cancellationFlag)
         : await this._reloadFromString(catch2TestListOutput.stdout, cancellationFlag);
 
-    if (this._shared.enabledTestListCaching) {
+    if (this._shared.configuration.getEnableTestListCaching()) {
       promisify(fs.writeFile)(cacheFile, catch2TestListOutput.stdout).catch(err =>
         this._shared.log.warn('couldnt write cache file:', err),
       );
@@ -295,13 +295,14 @@ export class Catch2Runnable extends AbstractRunnable {
     execParams.push('--durations');
     execParams.push('yes');
 
-    if (this._shared.isNoThrow) execParams.push('--nothrow');
+    if (this._shared.configuration.getDefaultNoThrow()) execParams.push('--nothrow');
 
-    if (this._shared.rngSeed !== null) {
+    const rngSeed = this._shared.configuration.getRandomGeneratorSeed();
+    if (rngSeed !== null) {
       execParams.push('--order');
       execParams.push('rand');
       execParams.push('--rng-seed');
-      execParams.push(this._shared.rngSeed.toString());
+      execParams.push(rngSeed.toString());
     }
 
     return execParams;
@@ -318,13 +319,14 @@ export class Catch2Runnable extends AbstractRunnable {
     debugParams.push('--durations');
     debugParams.push('yes');
 
-    if (this._shared.isNoThrow) debugParams.push('--nothrow');
+    if (this._shared.configuration.getDefaultNoThrow()) debugParams.push('--nothrow');
 
-    if (this._shared.rngSeed !== null) {
+    const rngSeed = this._shared.configuration.getRandomGeneratorSeed();
+    if (rngSeed !== null) {
       debugParams.push('--order');
       debugParams.push('rand');
       debugParams.push('--rng-seed');
-      debugParams.push(this._shared.rngSeed.toString());
+      debugParams.push(rngSeed.toString());
     }
 
     // TODO colouring 'debug.enableOutputColouring'

@@ -4,6 +4,7 @@ import { generateId, concat } from './Util';
 import { Suite } from './Suite';
 import { AbstractRunnable } from './AbstractRunnable';
 import { LoggerWrapper } from './LoggerWrapper';
+import * as vscode from 'vscode';
 
 export interface SharedWithTest {
   log: LoggerWrapper;
@@ -20,7 +21,7 @@ export interface AbstractTestEvent extends TestEvent {
   test: string;
 }
 
-export abstract class AbstractTest implements TestInfo {
+export abstract class AbstractTest implements vscode.TestItem {
   public readonly type: 'test' = 'test';
   public readonly id: string;
   public readonly testNameAsId: string;
@@ -43,7 +44,7 @@ export abstract class AbstractTest implements TestInfo {
 
   protected constructor(
     protected readonly _shared: SharedWithTest,
-    public readonly runnable: AbstractRunnable,
+    public readonly aRunnable: AbstractRunnable,
     public readonly parent: Suite, // ascending
     testNameAsId: string,
     label: string,
@@ -61,6 +62,8 @@ export abstract class AbstractTest implements TestInfo {
 
     this._updateBase(label, file, line, skipped, pureTags, testDescription, typeParam, valueParam, staticEvent);
   }
+
+  public state = new vscode.TestState(vscode.TestRunState.Unset);
 
   protected _updateBase(
     label: string,
@@ -192,7 +195,7 @@ export abstract class AbstractTest implements TestInfo {
   }
 
   public get skipped(): boolean {
-    return this._skipped || this.runnable.properties.markAsSkipped;
+    return this._skipped || this.aRunnable.properties.markAsSkipped;
   }
 
   public get errored(): boolean {

@@ -11,7 +11,7 @@ import { TaskQueue } from './util/TaskQueue';
 import { SharedVariables, TestRunEvent } from './SharedVariables';
 import { Catch2Section, Catch2Test } from './framework/Catch2Test';
 import { AbstractRunnable } from './AbstractRunnable';
-import { Configurations, Config } from './Configurations';
+import { Configurations, ConfigT } from './Configurations';
 import { readJSONSync } from 'fs-extra';
 import { join } from 'path';
 import { AbstractTest, AbstractTestEvent } from './AbstractTest';
@@ -290,7 +290,7 @@ export class TestAdapter implements api.TestAdapter, vscode.Disposable {
             log.exceptionS(e);
           }
 
-          const affectsAny = (...config: Config[]): boolean =>
+          const affectsAny = (...config: ConfigT[]): boolean =>
             config.some(c => changeEvent.affectsConfiguration(c, this.workspaceFolder.uri));
 
           if (affectsAny('test.randomGeneratorSeed')) {
@@ -345,7 +345,7 @@ export class TestAdapter implements api.TestAdapter, vscode.Disposable {
       }),
     );
 
-    this._rootSuite = new RootSuite(undefined, this._shared);
+    this._rootSuite = new RootSuite(undefined, this._shared as any); //eslint-disable-line
   }
 
   public dispose(): void {
@@ -444,7 +444,7 @@ export class TestAdapter implements api.TestAdapter, vscode.Disposable {
 
       const configuration = this._getConfiguration(this._shared.log);
 
-      this._rootSuite = new RootSuite(this._rootSuite.id, this._shared);
+      this._rootSuite = new RootSuite(this._rootSuite.id, this._shared as any); //eslint-disable-line
 
       const exec = configuration.getExecutables(this._shared);
 
@@ -496,9 +496,9 @@ export class TestAdapter implements api.TestAdapter, vscode.Disposable {
         .map(t => this._rootSuite.findTestById(t))
         .reduce((runnableToTestMap, test) => {
           if (test === undefined) return runnableToTestMap;
-          const tests = runnableToTestMap.get(test.runnable);
+          const tests = runnableToTestMap.get(test.aRunnable);
           if (tests) tests.push(test!);
-          else runnableToTestMap.set(test.runnable, [test]);
+          else runnableToTestMap.set(test.aRunnable, [test]);
           return runnableToTestMap;
         }, new Map<AbstractRunnable, Readonly<AbstractTest>[]>());
 
@@ -590,7 +590,7 @@ export class TestAdapter implements api.TestAdapter, vscode.Disposable {
       const envVars = Object.assign(Object.assign({}, process.env), runnable.properties.options.env!);
 
       const varToResolve: ResolveRuleAsync[] = [
-        ...runnable.properties.varToValue,
+        ...(runnable.properties.variableResolver as any), //eslint-disable-lines
         { resolve: '${suiteLabel}', rule: suiteLabels },
         { resolve: '${label}', rule: label },
         { resolve: '${exec}', rule: runnable.properties.path },

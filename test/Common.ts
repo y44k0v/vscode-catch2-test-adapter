@@ -19,7 +19,7 @@ import { TestLoadFinishedEvent, TestLoadStartedEvent, TestSuiteInfo, TestInfo } 
 import * as fsw from '../src/util/FSWrapper';
 import * as my from '../src/TestAdapter';
 import * as my2 from '../src/SharedVariables';
-import { Config } from '../src/Configurations';
+import { ConfigT } from '../src/Configurations';
 import { logger } from './LogOutputContent.test';
 
 ///
@@ -44,7 +44,7 @@ export const settings = new (class {
   }
 
   // eslint-disable-next-line
-  public updateConfig(key: Config, value: any): Promise<void> {
+  public updateConfig(key: ConfigT, value: any): Promise<void> {
     return new Promise((r, rj) => this.getConfig().update(key, value).then(r, rj));
   }
 

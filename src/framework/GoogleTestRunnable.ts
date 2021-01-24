@@ -6,7 +6,7 @@ import { AbstractRunnable, RunnableReloadResult } from '../AbstractRunnable';
 import { GoogleTestTest } from './GoogleTestTest';
 import { Parser } from 'xml2js';
 import { RunnableProperties } from '../RunnableProperties';
-import { SharedVariables } from '../SharedVariables';
+import { TestHierarchyShared } from '../TestHierarchy';
 import { RunningRunnable, ProcessResult } from '../RunningRunnable';
 import { AbstractTest, AbstractTestEvent } from '../AbstractTest';
 import { CancellationFlag, Version } from '../Util';
@@ -15,7 +15,7 @@ import { RootSuite } from '../RootSuite';
 
 export class GoogleTestRunnable extends AbstractRunnable {
   public constructor(
-    shared: SharedVariables,
+    shared: TestHierarchyShared,
     rootSuite: RootSuite,
     execInfo: RunnableProperties,
     private readonly _argumentPrefix: string,
@@ -165,7 +165,7 @@ export class GoogleTestRunnable extends AbstractRunnable {
   protected async _reloadChildren(cancellationFlag: CancellationFlag): Promise<RunnableReloadResult> {
     const cacheFile = this.properties.path + '.TestMate.testListCache.xml';
 
-    if (this._shared.enabledTestListCaching) {
+    if (this._shared.configuration.getEnableTestListCaching()) {
       try {
         const cacheStat = await promisify(fs.stat)(cacheFile);
         const execStat = await promisify(fs.stat)(this.properties.path);
@@ -205,7 +205,7 @@ export class GoogleTestRunnable extends AbstractRunnable {
 
         const result = await this._reloadFromXml(xmlStr, cancellationFlag);
 
-        if (!this._shared.enabledTestListCaching) {
+        if (!this._shared.configuration.getEnableTestListCaching()) {
           fs.unlink(cacheFile, (err: Error | null) => {
             err && this._shared.log.warn("Couldn't remove: ", cacheFile, err);
           });
@@ -236,16 +236,15 @@ export class GoogleTestRunnable extends AbstractRunnable {
 
     execParams.push(`--${this._argumentPrefix}also_run_disabled_tests`);
 
-    if (this._shared.rngSeed !== null) {
+    const rngSeed = this._shared.configuration.getRandomGeneratorSeed();
+    if (rngSeed !== null) {
       execParams.push(`--${this._argumentPrefix}shuffle`);
-      execParams.push(
-        `--${this._argumentPrefix}random_seed=` +
-          (this._shared.rngSeed === 'time' ? '0' : this._shared.rngSeed.toString()),
-      );
+      execParams.push(`--${this._argumentPrefix}random_seed=` + (rngSeed === 'time' ? '0' : rngSeed.toString()));
     }
 
-    if (this._shared.googleTestGMockVerbose !== 'default') {
-      execParams.push('--gmock_verbose=' + this._shared.googleTestGMockVerbose);
+    const googleTestGMockVerbose = this._shared.configuration.getGoogleTestGMockVerbose();
+    if (googleTestGMockVerbose !== 'default') {
+      execParams.push('--gmock_verbose=' + googleTestGMockVerbose);
     }
 
     return execParams;
@@ -273,7 +272,8 @@ export class GoogleTestRunnable extends AbstractRunnable {
     })();
 
     const testBeginRe = /^\[ RUN      \] ((.+)\.(.+))$/m;
-    const rngSeed: number | undefined = typeof this._shared.rngSeed === 'number' ? this._shared.rngSeed : undefined;
+    const rngSeedConf = this._shared.configuration.getRandomGeneratorSeed();
+    const rngSeed: number | undefined = typeof rngSeedConf === 'number' ? rngSeedConf : undefined;
 
     return new Promise<ProcessResult>(resolve => {
       const chunks: string[] = [];

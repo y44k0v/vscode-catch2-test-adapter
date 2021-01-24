@@ -5,7 +5,7 @@ import { RunnableProperties } from './RunnableProperties';
 import { AbstractTest, AbstractTestEvent } from './AbstractTest';
 import { Suite } from './Suite';
 import { TaskPool } from './util/TaskPool';
-import { SharedVariables } from './SharedVariables';
+import { TestHierarchyShared } from './TestHierarchy';
 import { RunningRunnable } from './RunningRunnable';
 import { promisify, inspect } from 'util';
 import { Version, reverse, getAbsolutePath, CancellationToken, CancellationFlag } from './Util';
@@ -34,7 +34,7 @@ export class RunnableReloadResult {
 
 export abstract class AbstractRunnable {
   public constructor(
-    protected readonly _shared: SharedVariables,
+    protected readonly _shared: TestHierarchyShared,
     protected readonly _rootSuite: RootSuite,
     public readonly properties: RunnableProperties,
     public readonly frameworkName: string,
@@ -122,7 +122,7 @@ export abstract class AbstractRunnable {
   private async _resolveText(text: string, ...additionalVarToValue: readonly ResolveRuleAsync[]): Promise<string> {
     let resolvedText = text;
     try {
-      resolvedText = await resolveVariablesAsync(resolvedText, this.properties.varToValue);
+      resolvedText = await this.properties.variableResolver.resolveAsync(resolvedText);
 
       resolvedText =
         additionalVarToValue.length > 0
@@ -159,7 +159,7 @@ export abstract class AbstractRunnable {
       resolve: AbstractRunnable._tagVar,
       rule: '', // will be filled soon enough
     };
-    const sourceRelPath = file ? pathlib.relative(this._shared.workspaceFolder.uri.fsPath, file) : '';
+    const sourceRelPath = file ? pathlib.relative(this._shared.workspace.uri.fsPath, file) : '';
 
     const varsToResolve = [
       tagsResolveRule,
@@ -543,7 +543,7 @@ export abstract class AbstractRunnable {
     cancellationToken: CancellationToken,
   ): Promise<void> {
     const collectChildrenToRun = (): readonly AbstractTest[] =>
-      this._rootSuite.collectTestToRun(tests, isParentIn, (test: AbstractTest): boolean => test.runnable === this);
+      this._rootSuite.collectTestToRun(tests, isParentIn, (test: AbstractTest): boolean => test.aRunnable === this);
 
     try {
       await this.runTasks('beforeEach', taskPool, cancellationToken);
@@ -647,7 +647,7 @@ export abstract class AbstractRunnable {
     {
       let trigger: (cause: 'reschedule' | 'closed' | 'timeout') => void;
 
-      const changeConn = this._shared.onDidChangeExecRunningTimeout(() => {
+      const changeConn = this._shared.configuration.onDidChangeExecRunningTimeout(() => {
         trigger('reschedule');
       });
 
@@ -659,17 +659,18 @@ export abstract class AbstractRunnable {
       const shedule = (): Promise<void> => {
         return new Promise<'reschedule' | 'closed' | 'timeout'>(resolve => {
           trigger = resolve;
+          const execRunningTimeout = this._shared.configuration.getExecRunningTimeout();
 
-          if (this._shared.execRunningTimeout !== null) {
+          if (execRunningTimeout !== null) {
             const elapsed = Date.now() - runInfo.startTime;
-            const left = Math.max(0, this._shared.execRunningTimeout - elapsed);
+            const left = Math.max(0, execRunningTimeout - elapsed);
             setTimeout(resolve, left, 'timeout');
           }
         }).then(cause => {
           if (cause === 'closed') {
             return Promise.resolve();
           } else if (cause === 'timeout') {
-            runInfo.killProcess(this._shared.execRunningTimeout);
+            runInfo.killProcess(this._shared.configuration.getExecRunningTimeout());
             return Promise.resolve();
           } else if (cause === 'reschedule') {
             return shedule();
@@ -699,7 +700,11 @@ export abstract class AbstractRunnable {
         try {
           // sequential execution of tasks
           for (const taskName of this.properties.runTask[type] || []) {
-            const exitCode = await this._shared.executeTask(taskName, this.properties.varToValue, cancellationToken);
+            const exitCode = await this._shared.executeTask(
+              taskName,
+              this.properties.variableResolver,
+              cancellationToken,
+            );
 
             if (exitCode !== undefined) {
               if (exitCode !== 0) {
@@ -749,10 +754,10 @@ export abstract class AbstractRunnable {
       directoriesToCheck.push(this.properties.options.cwd);
 
     if (
-      !this.properties.path.startsWith(this._shared.workspaceFolder.uri.fsPath) &&
-      (!this.properties.options.cwd || !this.properties.options.cwd.startsWith(this._shared.workspaceFolder.uri.fsPath))
+      !this.properties.path.startsWith(this._shared.workspace.uri.fsPath) &&
+      (!this.properties.options.cwd || !this.properties.options.cwd.startsWith(this._shared.workspace.uri.fsPath))
     )
-      directoriesToCheck.push(this._shared.workspaceFolder.uri.fsPath);
+      directoriesToCheck.push(this._shared.workspace.uri.fsPath);
 
     const found = getAbsolutePath(matchedPath, directoriesToCheck);
 

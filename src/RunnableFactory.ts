@@ -4,23 +4,23 @@ import { AbstractRunnable } from './AbstractRunnable';
 import { Catch2Runnable } from './framework/Catch2Runnable';
 import { GoogleTestRunnable } from './framework/GoogleTestRunnable';
 import { DOCRunnable } from './framework/DOCRunnable';
-import { SharedVariables } from './SharedVariables';
+import { TestHierarchyShared } from './TestHierarchy';
 import { FrameworkSpecific, RunTask } from './AdvancedExecutableInterface';
 import { Version } from './Util';
 import { RootSuite } from './RootSuite';
 import { Spawner, SpawnOptionsWithoutStdio, SpawnReturns } from './Spawner';
 import { GoogleBenchmarkRunnable } from './framework/GoogleBenchmarkRunnable';
-import { ResolveRuleAsync } from './util/ResolveRule';
+import { VariableResolver } from './util/VariableResolver';
 
 export class RunnableFactory {
   public constructor(
-    private readonly _shared: SharedVariables,
+    private readonly _shared: TestHierarchyShared,
     private readonly _execName: string | undefined,
     private readonly _execDescription: string | undefined,
     private readonly _rootSuite: RootSuite,
     private readonly _execPath: string,
     private readonly _execOptions: SpawnOptionsWithoutStdio,
-    private readonly _varToValue: ResolveRuleAsync[],
+    private readonly _variableResolver: VariableResolver,
     private readonly _catch2: FrameworkSpecific,
     private readonly _gtest: FrameworkSpecific,
     private readonly _doctest: FrameworkSpecific,
@@ -37,7 +37,12 @@ export class RunnableFactory {
       .scheduleTask(async () => {
         if (checkIsNativeExecutable) await c2fs.isNativeExecutableAsync(this._execPath);
 
-        return this._spawner.spawnAsync(this._execPath, ['--help'], this._execOptions, this._shared.execParsingTimeout);
+        return this._spawner.spawnAsync(
+          this._execPath,
+          ['--help'],
+          this._execOptions,
+          this._shared.configuration.getExecParsingTimeout(),
+        );
       })
       .then((runWithHelpRes: SpawnReturns) => {
         // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions
@@ -45,7 +50,7 @@ export class RunnableFactory {
         // u: unicode
         const regexFlags = 'su';
         {
-          if (this._catch2.helpRegex) this._shared.log.info('Custom regex', 'catch2', this._catch2.helpRegex);
+          if (this._catch2.helpRegex) this._shared.logger.info('Custom regex', 'catch2', this._catch2.helpRegex);
 
           const catch2 = runWithHelpRes.stdout.match(
             this._catch2.helpRegex ? new RegExp(this._catch2.helpRegex, regexFlags) : /Catch v(\d+)\.(\d+)\.(\d+)\s?/,
@@ -57,7 +62,7 @@ export class RunnableFactory {
               new RunnableProperties(
                 this._execName,
                 this._execDescription,
-                this._varToValue,
+                this._variableResolver,
                 this._execPath,
                 this._execOptions,
                 this._catch2,
@@ -72,7 +77,7 @@ export class RunnableFactory {
           }
         }
         {
-          if (this._gtest.helpRegex) this._shared.log.info('Custom regex', 'gtest', this._gtest.helpRegex);
+          if (this._gtest.helpRegex) this._shared.logger.info('Custom regex', 'gtest', this._gtest.helpRegex);
 
           const gtest = runWithHelpRes.stdout.match(
             this._gtest.helpRegex
@@ -86,7 +91,7 @@ export class RunnableFactory {
               new RunnableProperties(
                 this._execName,
                 this._execDescription,
-                this._varToValue,
+                this._variableResolver,
                 this._execPath,
                 this._execOptions,
                 this._gtest,
@@ -104,7 +109,7 @@ export class RunnableFactory {
           const gtestGoogleInsider = runWithHelpRes.stdout.match(/Try --helpfull to get a list of all flags./);
           if (gtestGoogleInsider) {
             // https://github.com/matepek/vscode-catch2-test-adapter/pull/191
-            this._shared.log.info('Special - Google Co. related - gtest output is detected.', this._execPath);
+            this._shared.logger.info('Special - Google Co. related - gtest output is detected.', this._execPath);
 
             return new GoogleTestRunnable(
               this._shared,
@@ -112,7 +117,7 @@ export class RunnableFactory {
               new RunnableProperties(
                 this._execName,
                 this._execDescription,
-                this._varToValue,
+                this._variableResolver,
                 this._execPath,
                 this._execOptions,
                 this._gtest,
@@ -128,7 +133,7 @@ export class RunnableFactory {
           }
         }
         {
-          if (this._doctest.helpRegex) this._shared.log.info('Custom regex', 'doctest', this._doctest.helpRegex);
+          if (this._doctest.helpRegex) this._shared.logger.info('Custom regex', 'doctest', this._doctest.helpRegex);
 
           const doc = runWithHelpRes.stdout.match(
             this._doctest.helpRegex
@@ -142,7 +147,7 @@ export class RunnableFactory {
               new RunnableProperties(
                 this._execName,
                 this._execDescription,
-                this._varToValue,
+                this._variableResolver,
                 this._execPath,
                 this._execOptions,
                 this._doctest,
@@ -159,7 +164,7 @@ export class RunnableFactory {
 
         {
           if (this._gbenchmark.helpRegex)
-            this._shared.log.info('Custom regex', 'gbenchmark', this._gbenchmark.helpRegex);
+            this._shared.logger.info('Custom regex', 'gbenchmark', this._gbenchmark.helpRegex);
 
           const gbenchmark = runWithHelpRes.stdout.match(
             this._gbenchmark.helpRegex
@@ -174,7 +179,7 @@ export class RunnableFactory {
               new RunnableProperties(
                 this._execName,
                 this._execDescription,
-                this._varToValue,
+                this._variableResolver,
                 this._execPath,
                 this._execOptions,
                 this._gbenchmark,

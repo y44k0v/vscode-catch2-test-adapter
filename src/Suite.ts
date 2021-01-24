@@ -1,12 +1,13 @@
 import { TestSuiteInfo, TestSuiteEvent } from 'vscode-test-adapter-api';
 
 import { generateId, milisecToStr } from './Util';
-import { SharedVariables } from './SharedVariables';
+import { TestHierarchyShared } from './TestHierarchy';
 import { AbstractTest } from './AbstractTest';
+import * as vscode from 'vscode';
 
 ///
 
-export class Suite implements TestSuiteInfo {
+export class Suite implements vscode.TestItem {
   public readonly type: 'suite' = 'suite';
   public readonly id: string;
   public readonly debuggable = false;
@@ -14,7 +15,7 @@ export class Suite implements TestSuiteInfo {
   protected _runningCounter = 0;
 
   public constructor(
-    protected readonly _shared: SharedVariables,
+    protected readonly _shared: TestHierarchyShared,
     public readonly parent: Suite | undefined,
     private readonly _label: string,
     private readonly _descriptionBase: string,
@@ -23,6 +24,8 @@ export class Suite implements TestSuiteInfo {
   ) {
     this.id = id ? id : generateId();
   }
+
+  public state = new vscode.TestState(vscode.TestRunState.Unset);
 
   // LiveShare serialization: https://github.com/hbenl/vscode-test-explorer-liveshare/pull/5
   public getInterfaceObj(): TestSuiteInfo {

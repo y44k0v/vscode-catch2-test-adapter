@@ -4,14 +4,15 @@ import { ExecutableConfig } from './ExecutableConfig';
 import { Suite } from './Suite';
 import { AbstractRunnable } from './AbstractRunnable';
 import { AbstractTest } from './AbstractTest';
-import { SharedVariables } from './SharedVariables';
+import { TestHierarchyShared } from './TestHierarchy';
 import { generateId } from './Util';
-import { ResolveRuleAsync } from './util/ResolveRule';
+import { VariableResolver } from './util/VariableResolver';
+import { TestItem } from './TestItem';
 
 export class RootSuite extends Suite implements vscode.Disposable {
   private _executables: ExecutableConfig[] = [];
 
-  public constructor(id: string | undefined, shared: SharedVariables) {
+  public constructor(id: string | undefined, shared: TestHierarchyShared) {
     super(shared, undefined, 'C++ TestMate', '', '', id);
   }
 
@@ -44,56 +45,60 @@ export class RootSuite extends Suite implements vscode.Disposable {
     return this._runningCounter > 0;
   }
 
-  public async run(tests: string[]): Promise<void> {
+  public async run(tests: TestItem[], cancellationToken: vscode.CancellationToken): Promise<void> {
     const testRunId = generateId();
     this.sendStartEventIfNeeded(testRunId, tests); // has to be first line, initilizes important variables
-
-    const isParentIn = tests.indexOf(this.id) !== -1;
-
-    let runnables = this._collectRunnables(tests, isParentIn);
-
+    const disp = cancellationToken.onCancellationRequested(() => this._cancellationTokenSource.cancel());
     try {
-      await this.runTasks('before', runnables, this._cancellationTokenSource.token);
-      runnables = this._collectRunnables(tests, isParentIn); // might changed due to tasks
-    } catch (e) {
-      for (const [runnable, tests] of runnables) {
-        runnable.sentStaticErrorEvent(testRunId, tests, e);
-      }
+      const isParentIn = tests.indexOf(this.id) !== -1;
 
-      this.sendFinishedEventIfNeeded(testRunId);
-      return this._runningPromise;
-    }
-
-    const ps: Promise<void>[] = [];
-
-    for (const [runnable] of runnables) {
-      ps.push(
-        runnable
-          .run(testRunId, tests, isParentIn, this._shared.taskPool, this._cancellationTokenSource.token)
-          .catch(err => {
-            this._shared.log.error('RootTestSuite.run.for.child', runnable.properties.path, err);
-          }),
-      );
-    }
-
-    try {
-      await Promise.all(ps);
+      let runnables = this._collectRunnables(tests, isParentIn);
 
       try {
-        await this.runTasks('after', runnables, this._cancellationTokenSource.token);
+        await this.runTasks('before', runnables, this._cancellationTokenSource.token);
+        runnables = this._collectRunnables(tests, isParentIn); // might changed due to tasks
       } catch (e) {
         for (const [runnable, tests] of runnables) {
           runnable.sentStaticErrorEvent(testRunId, tests, e);
         }
+
+        this.sendFinishedEventIfNeeded(testRunId);
+        return this._runningPromise;
       }
-    } catch (e) {
-      debugger;
-      this._shared.log.error('everything should be handled', e);
+
+      const ps: Promise<void>[] = [];
+
+      for (const [runnable] of runnables) {
+        ps.push(
+          runnable
+            .run(testRunId, tests, isParentIn, this._shared.taskPool, this._cancellationTokenSource.token)
+            .catch(err => {
+              this._shared.log.error('RootTestSuite.run.for.child', runnable.properties.path, err);
+            }),
+        );
+      }
+
+      try {
+        await Promise.all(ps);
+
+        try {
+          await this.runTasks('after', runnables, this._cancellationTokenSource.token);
+        } catch (e) {
+          for (const [runnable, tests] of runnables) {
+            runnable.sentStaticErrorEvent(testRunId, tests, e);
+          }
+        }
+      } catch (e) {
+        debugger;
+        this._shared.log.error('everything should be handled', e);
+      }
+
+      this.sendFinishedEventIfNeeded(testRunId);
+
+      return await this._runningPromise;
+    } finally {
+      disp.dispose();
     }
-
-    this.sendFinishedEventIfNeeded(testRunId);
-
-    return this._runningPromise;
   }
 
   public cancel(): void {
@@ -150,20 +155,22 @@ export class RootSuite extends Suite implements vscode.Disposable {
 
     if (runTasks.size === 0) return;
 
-    const varToValue: ResolveRuleAsync[] = [
-      ...this._shared.varToValue,
-      {
-        resolve: '${absPathArrayFlat}',
-        rule: (): Promise<string[]> => Promise.resolve(runnableExecArray),
-        isFlat: true,
-      },
-      { resolve: '${absPathConcatWithSpace}', rule: runnableExecArray.map(r => `"${r}"`).join(' ') },
-    ];
+    const variableresolver = new VariableResolver(
+      [
+        {
+          resolve: '${absPathArrayFlat}',
+          rule: (): Promise<string[]> => Promise.resolve(runnableExecArray),
+          isFlat: true,
+        },
+        { resolve: '${absPathConcatWithSpace}', rule: runnableExecArray.map(r => `"${r}"`).join(' ') },
+      ],
+      this._shared.variableResolver,
+    );
 
     try {
       // sequential execution of tasks
       for (const taskName of runTasks) {
-        const exitCode = await this._shared.executeTask(taskName, varToValue, cancellationToken);
+        const exitCode = await this._shared.executeTask(taskName, variableresolver, cancellationToken);
 
         if (exitCode !== undefined) {
           if (exitCode !== 0) {
@@ -182,9 +189,9 @@ export class RootSuite extends Suite implements vscode.Disposable {
 
   private _collectRunnables(tests: string[], isParentIn: boolean): Map<AbstractRunnable, AbstractTest[]> {
     return this.collectTestToRun(tests, isParentIn).reduce((prev, curr) => {
-      const arr = prev.get(curr.runnable);
+      const arr = prev.get(curr.aRunnable);
       if (arr) arr.push(curr);
-      else prev.set(curr.runnable, [curr]);
+      else prev.set(curr.aRunnable, [curr]);
       return prev;
     }, new Map<AbstractRunnable, AbstractTest[]>());
   }

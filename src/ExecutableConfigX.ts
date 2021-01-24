@@ -5,26 +5,25 @@ import * as vscode from 'vscode';
 import { AbstractRunnable } from './AbstractRunnable';
 import * as c2fs from './util/FSWrapper';
 import { getAbsolutePath, findURIs } from './Util';
-import {
-  resolveOSEnvironmentVariables,
-  createPythonIndexerForPathVariable,
-  createPythonIndexerForStringVariable,
-  resolveVariablesAsync,
-  ResolveRuleAsync,
-} from './util/ResolveRule';
 import { RunnableFactory } from './RunnableFactory';
-import { SharedVariables } from './SharedVariables';
 import { GazeWrapper, VSCFSWatcherWrapper, FSWatcher } from './util/FSWatcher';
 import { RootSuite } from './RootSuite';
 import { readJSONSync } from 'fs-extra';
 import { Spawner, DefaultSpawner, SpawnWithExecutor } from './Spawner';
 import { RunTask, ExecutionWrapper, FrameworkSpecific } from './AdvancedExecutableInterface';
+import { TestHierarchyShared } from './TestHierarchy';
+import {
+  createPythonIndexerForPathVariable,
+  createPythonIndexerForStringVariable,
+  ResolveRuleAsync,
+  VariableResolver,
+} from './util/VariableResolver';
 
 ///
 
 export class ExecutableConfig implements vscode.Disposable {
   public constructor(
-    private readonly _shared: SharedVariables,
+    private readonly _shared: TestHierarchyShared,
     private readonly _pattern: string,
     private readonly _name: string | undefined,
     private readonly _description: string | undefined,
@@ -122,20 +121,22 @@ export class ExecutableConfig implements vscode.Disposable {
   public async load(rootSuite: RootSuite): Promise<Error[]> {
     const pattern = await this._pathProcessor(this._pattern);
 
-    this._shared.log.info('pattern', this._pattern, this._shared.workspaceFolder.uri.fsPath, pattern);
+    this._shared.logger.info('pattern', this._pattern, this._shared.workspace.uri.fsPath, pattern);
 
     if (pattern.isAbsolute && pattern.isPartOfWs)
-      this._shared.log.info('Absolute path is used for workspace directory. This is unnecessary, but it should work.');
+      this._shared.logger.info(
+        'Absolute path is used for workspace directory. This is unnecessary, but it should work.',
+      );
 
     if (this._pattern.indexOf('\\') != -1)
-      this._shared.log.info('Pattern contains backslash character. Try to avoid that.');
+      this._shared.logger.info('Pattern contains backslash character. Try to avoid that.');
 
     let filePaths: string[] = [];
 
     let execWatcher: FSWatcher | undefined = undefined;
     try {
       if (pattern.isPartOfWs) {
-        execWatcher = new VSCFSWatcherWrapper(this._shared.workspaceFolder, pattern.relativeToWsPosix);
+        execWatcher = new VSCFSWatcherWrapper(this._shared.workspace, pattern.relativeToWsPosix);
       } else {
         execWatcher = new GazeWrapper([pattern.absPath]);
       }
@@ -144,12 +145,12 @@ export class ExecutableConfig implements vscode.Disposable {
 
       execWatcher.onError((err: Error) => {
         // eslint-disable-next-line
-        if ((err as any).code == 'ENOENT') this._shared.log.info('watcher error', err);
-        else this._shared.log.error('watcher error', err);
+        if ((err as any).code == 'ENOENT') this._shared.logger.info('watcher error', err);
+        else this._shared.logger.error('watcher error', err);
       });
 
       execWatcher.onAll(fsPath => {
-        this._shared.log.info('watcher event:', fsPath);
+        this._shared.logger.info('watcher event:', fsPath);
         this._handleEverything(fsPath, rootSuite);
       });
 
@@ -158,14 +159,14 @@ export class ExecutableConfig implements vscode.Disposable {
       execWatcher && execWatcher.dispose();
       filePaths.push(this._pattern);
 
-      this._shared.log.exceptionS(e, "Coudn't watch pattern");
+      this._shared.logger.exceptionS(e, "Coudn't watch pattern");
     }
 
     const suiteCreationAndLoadingTasks: Promise<void>[] = [];
 
     for (let i = 0; i < filePaths.length; i++) {
       const file = filePaths[i];
-      this._shared.log.debug('Checking file for tests:', file);
+      this._shared.logger.debug('Checking file for tests:', file);
 
       if (this._shouldIgnorePath(file)) continue;
 
@@ -182,27 +183,27 @@ export class ExecutableConfig implements vscode.Disposable {
                 await suite.reloadTests(this._shared.taskPool, this._cancellationFlag);
                 this._runnables.set(file, suite);
               } catch (reason) {
-                this._shared.log.warn("Couldn't load executable", reason, suite);
+                this._shared.logger.warn("Couldn't load executable", reason, suite);
                 if (
                   this._strictPattern === true ||
-                  (this._strictPattern === undefined && this._shared.enabledStrictPattern === true)
+                  (this._strictPattern === undefined && this._shared.configuration.getEnableStrictPattern() === true)
                 )
                   throw Error(
                     `Coudn\'t load executable while using "discovery.strictPattern" or "test.advancedExecutables:strictPattern": ${file}\n  ${reason}`,
                   );
               }
             } catch (reason) {
-              this._shared.log.debug('Not a test executable:', file, 'reason:', reason);
+              this._shared.logger.debug('Not a test executable:', file, 'reason:', reason);
               if (
                 this._strictPattern === true ||
-                (this._strictPattern === undefined && this._shared.enabledStrictPattern === true)
+                (this._strictPattern === undefined && this._shared.configuration.getEnableStrictPattern() === true)
               )
                 throw Error(
                   `Coudn\'t load executable while using "discovery.strictPattern" or "test.advancedExecutables:strictPattern": ${file}\n  ${reason}`,
                 );
             }
           } catch (reason) {
-            this._shared.log.debug('Not an executable:', file, reason);
+            this._shared.logger.debug('Not an executable:', file, reason);
           }
         })(),
       );
@@ -226,13 +227,13 @@ export class ExecutableConfig implements vscode.Disposable {
         for (const pattern of this._dependsOn) {
           const p = await this._pathProcessor(pattern);
           if (p.isPartOfWs) {
-            const w = new VSCFSWatcherWrapper(this._shared.workspaceFolder, p.relativeToWsPosix);
+            const w = new VSCFSWatcherWrapper(this._shared.workspace, p.relativeToWsPosix);
             this._disposables.push(w);
 
-            w.onError((e: Error): void => this._shared.log.error('dependsOn watcher:', e, p));
+            w.onError((e: Error): void => this._shared.logger.error('dependsOn watcher:', e, p));
 
             w.onAll((fsPath: string): void => {
-              this._shared.log.info('dependsOn watcher event:', fsPath);
+              this._shared.logger.info('dependsOn watcher event:', fsPath);
               this._shared.sendRetireEvent(this._runnables.values());
             });
           } else {
@@ -244,15 +245,15 @@ export class ExecutableConfig implements vscode.Disposable {
           const w = new GazeWrapper(absPatterns);
           this._disposables.push(w);
 
-          w.onError((e: Error): void => this._shared.log.error('dependsOn watcher:', e, absPatterns));
+          w.onError((e: Error): void => this._shared.logger.error('dependsOn watcher:', e, absPatterns));
 
           w.onAll((fsPath: string): void => {
-            this._shared.log.info('dependsOn watcher event:', fsPath);
+            this._shared.logger.info('dependsOn watcher event:', fsPath);
             this._shared.sendRetireEvent(this._runnables.values());
           });
         }
       } catch (e) {
-        this._shared.log.error('dependsOn error:', e);
+        this._shared.logger.error('dependsOn error:', e);
       }
     }
 
@@ -261,21 +262,21 @@ export class ExecutableConfig implements vscode.Disposable {
 
   private async _pathProcessor(
     path: string,
-    moreVarsToResolve?: readonly ResolveRuleAsync[],
+    variableResolver?: VariableResolver,
   ): Promise<{
     isAbsolute: boolean;
     absPath: string;
     isPartOfWs: boolean;
     relativeToWsPosix: string;
   }> {
-    path = await this._resolveVariables(path, false, moreVarsToResolve);
+    path = await (variableResolver || this._shared.variableResolver).resolveAsync(path, false);
 
     const normPattern = path.replace(/\\/g, '/');
     const isAbsolute = pathlib.posix.isAbsolute(normPattern) || pathlib.win32.isAbsolute(normPattern);
     const absPath = isAbsolute
       ? vscode.Uri.file(pathlib.normalize(path)).fsPath
-      : vscode.Uri.file(pathlib.join(this._shared.workspaceFolder.uri.fsPath, normPattern)).fsPath;
-    const relativeToWs = pathlib.relative(this._shared.workspaceFolder.uri.fsPath, absPath);
+      : vscode.Uri.file(pathlib.join(this._shared.workspace.uri.fsPath, normPattern)).fsPath;
+    const relativeToWs = pathlib.relative(this._shared.workspace.uri.fsPath, absPath);
 
     return {
       isAbsolute,
@@ -286,9 +287,10 @@ export class ExecutableConfig implements vscode.Disposable {
   }
 
   private async _createSuiteByUri(filePath: string, rootSuite: RootSuite): Promise<RunnableFactory> {
-    const relPath = pathlib.relative(this._shared.workspaceFolder.uri.fsPath, filePath);
+    const relPath = pathlib.relative(this._shared.workspace.uri.fsPath, filePath);
 
-    let varToValue: ResolveRuleAsync[] = [];
+    const varToValue: ResolveRuleAsync[] = [];
+    const variableResolver = new VariableResolver(varToValue, this._shared.variableResolver);
 
     const subPath = createPythonIndexerForPathVariable;
 
@@ -301,7 +303,7 @@ export class ExecutableConfig implements vscode.Disposable {
       const baseFilename = pathlib.basename(filename, extFilename);
       const relDirpath = pathlib.dirname(relPath);
 
-      varToValue = [
+      varToValue.push(
         { resolve: '${filename}', rule: filename }, // redundant but might faster
         { resolve: '${relDirpath}', rule: relDirpath }, // redundant but might faster
         subFilename('filename', filename),
@@ -311,38 +313,37 @@ export class ExecutableConfig implements vscode.Disposable {
         subPath('absDirpath', pathlib.dirname(filePath)),
         { resolve: '${extFilename}', rule: extFilename },
         { resolve: '${baseFilename}', rule: baseFilename },
-        ...this._shared.varToValue,
-      ];
+      );
     } catch (e) {
-      this._shared.log.exceptionS(e);
+      this._shared.logger.exceptionS(e);
     }
 
     const variableRe = /\$\{[^ ]*\}/;
 
     let resolvedCwd = '.';
     try {
-      resolvedCwd = await this._resolveVariables(this._cwd, false, varToValue);
+      resolvedCwd = await variableResolver.resolveAsync(this._cwd, false);
 
-      if (resolvedCwd.match(variableRe)) this._shared.log.warn('Possibly unresolved variable', resolvedCwd);
+      if (resolvedCwd.match(variableRe)) this._shared.logger.warn('Possibly unresolved variable', resolvedCwd);
 
-      resolvedCwd = pathlib.resolve(this._shared.workspaceFolder.uri.fsPath, resolvedCwd);
+      resolvedCwd = pathlib.resolve(this._shared.workspace.uri.fsPath, resolvedCwd);
 
       varToValue.push(subPath('cwd', resolvedCwd));
     } catch (e) {
-      this._shared.log.error('resolvedCwd', e);
+      this._shared.logger.error('resolvedCwd', e);
     }
 
     let resolvedEnv: { [prop: string]: string } = {};
     try {
       if (this._env) Object.assign(resolvedEnv, this._env);
 
-      resolvedEnv = await this._resolveVariables(resolvedEnv, true, varToValue);
+      resolvedEnv = await variableResolver.resolveAsync(resolvedEnv, true);
     } catch (e) {
-      this._shared.log.error('resolvedEnv', e);
+      this._shared.logger.error('resolvedEnv', e);
     }
 
     if (this._envFile) {
-      const resolvedEnvFile = await this._pathProcessor(this._envFile, varToValue);
+      const resolvedEnvFile = await this._pathProcessor(this._envFile, variableResolver);
       try {
         const envFromFile = readJSONSync(resolvedEnvFile.absPath);
         if (typeof envFromFile !== 'object') throw Error('envFile is not a JSON object');
@@ -352,30 +353,30 @@ export class ExecutableConfig implements vscode.Disposable {
           if (typeof envFromFile[p] !== 'string') throw Error('property of envFile is not a string: ' + p);
 
         Object.assign(resolvedEnv, envFromFile);
-        this._shared.log.info(
+        this._shared.logger.info(
           'Extra environment variables has been added from file',
           resolvedEnvFile.absPath,
           envFromFile,
         );
       } catch (e) {
-        this._shared.log.warn('Unable to parse envFile', `"${resolvedEnvFile.absPath}"`, e);
+        this._shared.logger.warn('Unable to parse envFile', `"${resolvedEnvFile.absPath}"`, e);
       }
     }
 
     let spawner: Spawner = new DefaultSpawner();
     if (this._executionWrapper) {
       try {
-        const resolvedPath = await this._pathProcessor(this._executionWrapper.path, varToValue);
-        const resolvedArgs = await this._resolveVariables(this._executionWrapper.args, false, varToValue);
+        const resolvedPath = await this._pathProcessor(this._executionWrapper.path, variableResolver);
+        const resolvedArgs = await variableResolver.resolveAsync(this._executionWrapper.args, false);
         spawner = new SpawnWithExecutor(resolvedPath.absPath, resolvedArgs);
-        this._shared.log.info('executionWrapper was specified', resolvedPath, resolvedArgs);
+        this._shared.logger.info('executionWrapper was specified', resolvedPath, resolvedArgs);
       } catch (e) {
-        this._shared.log.warn('Unable to apply executionWrapper', e);
+        this._shared.logger.warn('Unable to apply executionWrapper', e);
       }
     }
 
     return new RunnableFactory(
-      this._shared as any, // eslint-disable-line
+      this._shared,
       this._name,
       this._description,
       rootSuite,
@@ -384,7 +385,7 @@ export class ExecutableConfig implements vscode.Disposable {
         cwd: resolvedCwd,
         env: Object.assign({}, process.env, resolvedEnv),
       },
-      varToValue as any, //eslint-disable-line
+      variableResolver,
       this._catch2,
       this._gtest,
       this._doctest,
@@ -415,7 +416,7 @@ export class ExecutableConfig implements vscode.Disposable {
     if (runnable !== undefined) {
       this._recursiveHandleRunnable(runnable)
         .catch(reject => {
-          this._shared.log.errorS(`_recursiveHandleRunnable errors should be handled inside`, reject);
+          this._shared.logger.errorS(`_recursiveHandleRunnable errors should be handled inside`, reject);
         })
         .finally(() => {
           this._lastEventArrivedAt.delete(filePath);
@@ -423,11 +424,11 @@ export class ExecutableConfig implements vscode.Disposable {
     } else {
       if (this._shouldIgnorePath(filePath)) return;
 
-      this._shared.log.info('possibly new suite: ' + filePath);
+      this._shared.logger.info('possibly new suite: ' + filePath);
 
       this._recursiveHandleFile(filePath, rootSuite)
         .catch(reject => {
-          this._shared.log.errorS(`_recursiveHandleFile errors should be handled inside`, reject);
+          this._shared.logger.errorS(`_recursiveHandleFile errors should be handled inside`, reject);
         })
         .finally(() => {
           this._lastEventArrivedAt.delete(filePath);
@@ -446,13 +447,13 @@ export class ExecutableConfig implements vscode.Disposable {
     const lastEventArrivedAt = this._lastEventArrivedAt.get(filePath);
 
     if (lastEventArrivedAt === undefined) {
-      this._shared.log.errorS('_recursiveHandleFile: lastEventArrivedAt');
+      this._shared.logger.errorS('_recursiveHandleFile: lastEventArrivedAt');
       debugger;
       return;
     }
 
-    if (Date.now() - lastEventArrivedAt > this._shared.execWatchTimeout) {
-      this._shared.log.info('file refresh timeout:', filePath);
+    if (Date.now() - lastEventArrivedAt > this._shared.configuration.getExecWatchTimeout()) {
+      this._shared.logger.info('file refresh timeout:', filePath);
       return;
     }
 
@@ -467,20 +468,23 @@ export class ExecutableConfig implements vscode.Disposable {
         const runnable = await factory.create(true);
 
         return this._recursiveHandleRunnable(runnable).catch(reject => {
-          this._shared.log.errorS(`_recursiveHandleFile._recursiveHandleFile errors should be handled inside`, reject);
+          this._shared.logger.errorS(
+            `_recursiveHandleFile._recursiveHandleFile errors should be handled inside`,
+            reject,
+          );
         });
       } catch (reason) {
         const nextDelay = Math.min(delay + 1000, 5000);
 
         if (tryCount > 20) {
-          this._shared.log.info("couldn't add file", filePath, 'reason', reason, tryCount);
+          this._shared.logger.info("couldn't add file", filePath, 'reason', reason, tryCount);
           return;
         }
 
         if (c2fs.isSpawnBusyError(reason)) {
-          this._shared.log.debug('_recursiveHandleFile: busy, retrying... ' + filePath, 'reason:', reason);
+          this._shared.logger.debug('_recursiveHandleFile: busy, retrying... ' + filePath, 'reason:', reason);
         } else {
-          this._shared.log.debug('_recursiveHandleFile: other error... ' + filePath, 'reason:', reason);
+          this._shared.logger.debug('_recursiveHandleFile: other error... ' + filePath, 'reason:', reason);
         }
 
         await promisify(setTimeout)(delay);
@@ -501,7 +505,7 @@ export class ExecutableConfig implements vscode.Disposable {
     const lastEventArrivedAt = this._lastEventArrivedAt.get(filePath);
 
     if (lastEventArrivedAt === undefined) {
-      this._shared.log.errorS('_recursiveHandleRunnable: lastEventArrivedAt');
+      this._shared.logger.errorS('_recursiveHandleRunnable: lastEventArrivedAt');
       debugger;
       return;
     }
@@ -515,11 +519,11 @@ export class ExecutableConfig implements vscode.Disposable {
         this._shared.sendRetireEvent([runnable]);
       } catch (reason) {
         if (reason.code === undefined)
-          this._shared.log.debug('problem under reloading', { reason, filePath, runnable });
+          this._shared.logger.debug('problem under reloading', { reason, filePath, runnable });
         return this._recursiveHandleRunnable(runnable, false, Math.min(delay * 2, 2000));
       }
-    } else if (Date.now() - lastEventArrivedAt > this._shared.execWatchTimeout) {
-      this._shared.log.info('refresh timeout:', filePath);
+    } else if (Date.now() - lastEventArrivedAt > this._shared.configuration.getExecWatchTimeout()) {
+      this._shared.logger.info('refresh timeout:', filePath);
       const foundRunnable = this._runnables.get(filePath);
       if (foundRunnable) {
         return this._shared.loadWithTask(
@@ -544,11 +548,11 @@ export class ExecutableConfig implements vscode.Disposable {
   private _shouldIgnorePath(filePath: string): boolean {
     if (!this._pattern.match(/(\/|\\)_deps(\/|\\)/) && filePath.indexOf('/_deps/') !== -1) {
       // cmake fetches the dependencies here. we dont care about it 🤞
-      this._shared.log.info('skipping because it is under "/_deps/"', filePath);
+      this._shared.logger.info('skipping because it is under "/_deps/"', filePath);
       return true;
     } else if (!this._pattern.match(/(\/|\\)CMakeFiles(\/|\\)/) && filePath.indexOf('/CMakeFiles/') !== -1) {
       // cmake fetches the dependencies here. we dont care about it 🤞
-      this._shared.log.info('skipping because it is under "/CMakeFiles/"', filePath);
+      this._shared.logger.info('skipping because it is under "/CMakeFiles/"', filePath);
       return true;
     } else {
       return false;
@@ -557,17 +561,5 @@ export class ExecutableConfig implements vscode.Disposable {
 
   private _isDuplicate(filePath: string): boolean {
     return this._runnables.has(filePath);
-  }
-
-  private async _resolveVariables<T>(
-    value: T,
-    strictAllowed: boolean,
-    moreVarsToResolve?: readonly ResolveRuleAsync[],
-  ): Promise<T> {
-    let resolved = resolveOSEnvironmentVariables(value, strictAllowed);
-    resolved = await resolveVariablesAsync(resolved, this._shared.varToValue);
-    if (moreVarsToResolve) resolved = await resolveVariablesAsync(resolved, moreVarsToResolve);
-    this._shared.log.debug('ExecutableConfig.resolveVariable: ', { value, resolved, strictAllowed });
-    return resolved;
   }
 }
