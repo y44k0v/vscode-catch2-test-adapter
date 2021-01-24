@@ -2,7 +2,7 @@ import * as pathlib from 'path';
 import * as fs from 'fs';
 
 import { RunnableProperties } from './RunnableProperties';
-import { AbstractTest, AbstractTestEvent } from './AbstractTest';
+import { AbstractTest } from './AbstractTest';
 import { Suite } from './Suite';
 import { TaskPool } from './util/TaskPool';
 import { TestHierarchyShared } from './TestHierarchy';
@@ -20,6 +20,7 @@ import { TestEvent } from 'vscode-test-adapter-api';
 import { RootSuite } from './RootSuite';
 import { EOL } from 'os';
 import { isSpawnBusyError } from './util/FSWrapper';
+import { TestItem } from './TestItem';
 
 export class RunnableReloadResult {
   public tests = new Set<AbstractTest>();
@@ -389,7 +390,7 @@ export abstract class AbstractRunnable {
           throw Error('assert');
         }
 
-        public parseAndProcessTestCase(): AbstractTestEvent {
+        public parseAndProcessTestCase(): void {
           throw Error('assert');
         }
       })();
@@ -520,14 +521,10 @@ export abstract class AbstractRunnable {
         for (const t of this._tests) if (!reloadResult.tests.has(t)) toRemove.push(t);
 
         if (toRemove.length > 0 || reloadResult.changedAny) {
-          await this._shared.loadWithTask(
-            async (): Promise<void> => {
-              toRemove.forEach(t => {
-                t.removeWithLeafAscendants();
-                this._tests.delete(t);
-              });
-            },
-          );
+          toRemove.forEach(t => {
+            t.removeWithLeafAscendants();
+            this._tests.delete(t);
+          });
         }
       } else {
         this._shared.log.debug('reloadTests was skipped due to mtime', this.properties.path);
@@ -537,7 +534,7 @@ export abstract class AbstractRunnable {
 
   public async run(
     testRunId: string,
-    tests: readonly string[],
+    tests: readonly TestItem[],
     isParentIn: boolean,
     taskPool: TaskPool,
     cancellationToken: CancellationToken,
@@ -582,18 +579,12 @@ export abstract class AbstractRunnable {
     cancellationToken: CancellationToken,
   ): Promise<void> {
     return this.properties.parallelizationPool.scheduleTask(() => {
-      const descendantsWithStaticEvent: AbstractTest[] = [];
       const runnableDescendant: AbstractTest[] = [];
 
       childrenToRun.forEach(t => {
-        const staticEvent = t.getStaticEvent(testRunId);
-        if (staticEvent) descendantsWithStaticEvent.push(t);
-        else runnableDescendant.push(t);
+        t.getStaticEvent();
+        if (!t.getStaticEvent()) runnableDescendant.push(t);
       });
-
-      if (descendantsWithStaticEvent.length > 0) {
-        this.sendStaticEvents(testRunId, descendantsWithStaticEvent, undefined);
-      }
 
       if (runnableDescendant.length === 0) {
         return Promise.resolve();
@@ -791,15 +782,7 @@ export abstract class AbstractRunnable {
     staticEvent: TestEvent | undefined,
   ): void {
     childrenToRun.forEach(test => {
-      const testStaticEvent = test.getStaticEvent(testRunId);
-      const event: TestEvent | undefined = staticEvent || testStaticEvent;
-      if (event) {
-        event.test = test;
-        event.testRunId = testRunId;
-        // we dont need to send events about ancestors: https://github.com/hbenl/vscode-test-explorer/issues/141
-        // probably we dont need this either: this._shared.sendTestEvent(test!.getStartEvent());
-        this._shared.sendTestRunEvent(event);
-      }
+      test.getStaticEvent();
     });
   }
 

@@ -31,10 +31,9 @@ describe(path.basename(__filename), function () {
             <OverallResult success="true" durationInSeconds="0.000112"/>
           </TestCase>`;
 
-    const ev = catch2.parseAndProcessTestCase('runid', output, 42, null, '');
+    const ev = catch2.parseAndProcessTestCase(output, 42, null, '');
 
     const expected: TestRunEvent = {
-      testRunId: 'runid',
       type: 'test',
       state: 'passed',
       test: catch2.id,
@@ -93,10 +92,9 @@ describe(path.basename(__filename), function () {
       '0\n    ]\n}----------------\ndecode response\n        </StdOut>\n      ' +
       '</OverallResult>\n    </TestCase>';
 
-    const ev = catch2.parseAndProcessTestCase('runid', output, 42, null, '');
+    const ev = catch2.parseAndProcessTestCase(output, 42, null, '');
 
     const expected: TestRunEvent = {
-      testRunId: 'runid',
       type: 'test',
       state: 'passed',
       test: catch2.id,
@@ -126,10 +124,9 @@ describe(path.basename(__filename), function () {
       '    <TestCase name="LightSensor: transmits correctly." filename="/home/home/Documents/Cpp-Things/Microfabricator-Embedded/test/unit-tests/light_sensor_test.cpp" line="29">',
       '[132538μs] 12  D FakeLightSensor.hpp          Constructed <Pin:10>',
     ];
-    const ev = catch2.parseAndProcessTestCase('runid', output.join(EOL), 42, null, '');
+    const ev = catch2.parseAndProcessTestCase(output.join(EOL), 42, null, '');
 
     const expected: TestRunEvent = {
-      testRunId: 'runid',
       type: 'test',
       state: 'passed',
       test: catch2.id,

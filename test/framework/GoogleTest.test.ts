@@ -45,10 +45,9 @@ describe(path.basename(__filename), function () {
       '[  FAILED  ] TestCase.TestName (66 ms)',
     ].join(EOL);
 
-    const ev = gtest.parseAndProcessTestCase('runid', output, 42, null, '');
+    const ev = gtest.parseAndProcessTestCase(output, 42, null, '');
 
     const expected: TestRunEvent = {
-      testRunId: 'runid',
       type: 'test',
       test: gtest.id,
       message: output,
@@ -99,10 +98,9 @@ describe(path.basename(__filename), function () {
       '[  FAILED  ] TestCase.TestName (0 ms)',
     ].join(EOL);
 
-    const ev = gtest.parseAndProcessTestCase('runid', output, 42, null, '');
+    const ev = gtest.parseAndProcessTestCase(output, 42, null, '');
 
     const expected: TestRunEvent = {
-      testRunId: 'runid',
       type: 'test',
       test: gtest.id,
       message: output,
@@ -165,10 +163,9 @@ describe(path.basename(__filename), function () {
       '[  FAILED  ] TestCase.TestName (66 ms)',
     ].join(EOL);
 
-    const ev = gtest.parseAndProcessTestCase('runid', output, 42, null, '');
+    const ev = gtest.parseAndProcessTestCase(output, 42, null, '');
 
     const expected: TestRunEvent = {
-      testRunId: 'runid',
       type: 'test',
       test: gtest.id,
       message: output,
@@ -240,10 +237,9 @@ describe(path.basename(__filename), function () {
       '[  FAILED  ] TestCase.TestName (66 ms)',
     ].join(EOL);
 
-    const ev = gtest.parseAndProcessTestCase('runid', output, 42, null, '');
+    const ev = gtest.parseAndProcessTestCase(output, 42, null, '');
 
     const expected: TestRunEvent = {
-      testRunId: 'runid',
       type: 'test',
       test: gtest.id,
       message: output.replace(/\): error: /g, '): error: \n'),

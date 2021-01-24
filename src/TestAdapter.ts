@@ -429,7 +429,7 @@ export class TestAdapter implements api.TestAdapter, vscode.Disposable {
       } else {
         this._testsEmitter.fire({
           type: 'finished',
-          suite: this._rootSuite.getInterfaceObj(),
+          suite: this._rootSuite,
         });
       }
     }

@@ -1,5 +1,5 @@
 import * as xml2js from 'xml2js';
-import { AbstractTest, StaticTestEventBase, AbstractTestEvent, SharedWithTest } from '../AbstractTest';
+import { AbstractTest, StaticTestEventBase, SharedWithTest } from '../AbstractTest';
 import { inspect } from 'util';
 import { TestEventBuilder } from '../TestEventBuilder';
 import * as pathlib from 'path';
@@ -134,16 +134,14 @@ export class Catch2Test extends AbstractTest {
   }
 
   public parseAndProcessTestCase(
-    testRunId: string,
     output: string,
     rngSeed: number | undefined,
     timeout: number | null,
     stderr: string | undefined,
-  ): AbstractTestEvent {
+  ): void {
     if (timeout !== null) {
-      const ev = this.getTimeoutEvent(testRunId, timeout);
-      this.lastRunEvent = ev;
-      return ev;
+      this.getTimeoutEvent(timeout);
+      return;
     }
 
     let res: XmlObject = {};
@@ -155,7 +153,7 @@ export class Catch2Test extends AbstractTest {
       }
     });
 
-    const testEventBuilder = new TestEventBuilder(this, testRunId);
+    const testEventBuilder = new TestEventBuilder(this);
 
     if (rngSeed) testEventBuilder.appendMessage(`🔀 Randomness seeded to: ${rngSeed.toString()}`, 0);
 
@@ -168,9 +166,7 @@ export class Catch2Test extends AbstractTest {
       testEventBuilder.appendMessage('⬆ std::cerr', null);
     }
 
-    const testEvent = testEventBuilder.build();
-
-    return testEvent;
+    testEventBuilder.build();
   }
 
   private _processXmlTagTestCaseInner(testCase: XmlObject, testEventBuilder: TestEventBuilder): void {

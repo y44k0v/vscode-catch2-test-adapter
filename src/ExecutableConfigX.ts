@@ -526,12 +526,8 @@ export class ExecutableConfig implements vscode.Disposable {
       this._shared.logger.info('refresh timeout:', filePath);
       const foundRunnable = this._runnables.get(filePath);
       if (foundRunnable) {
-        return this._shared.loadWithTask(
-          async (): Promise<void> => {
-            foundRunnable.removeTests();
-            this._runnables.delete(filePath);
-          },
-        );
+        foundRunnable.removeTests();
+        this._runnables.delete(filePath);
       }
     } else {
       await promisify(setTimeout)(delay);

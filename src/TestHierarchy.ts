@@ -8,7 +8,7 @@ import { TaskPool } from './util/TaskPool';
 import { BuildProcessChecker } from './util/BuildProcessChecker';
 import { AbstractRunnable } from './AbstractRunnable';
 import { TestRunEvent } from './SharedVariables';
-import { AbstractTest, AbstractTestEvent } from './AbstractTest';
+import { AbstractTest } from './AbstractTest';
 import { ExecutableConfig } from './ExecutableConfigX';
 import { RootSuite } from './RootSuite';
 import { Suite } from './Suite';
@@ -108,6 +108,7 @@ export class TestHierarchy implements vscode.TestHierarchy<TestItem> {
 
   private async _reloadTests(): Promise<void> {
     this.root.children = [];
+    this._execConfig.forEach(e => e.dispose());
 
     this._execConfig = this._shared.configuration.getExecutables();
 
@@ -184,17 +185,10 @@ export class TestHierarchyShared implements vscode.Disposable {
 
   public readonly taskPool: TaskPool;
 
-  //TODO
-  public readonly loadWithTask: (task: () => Promise<void | Error[]>) => Promise<void> = () => {
-    return Promise.resolve();
-  };
   public readonly sendRetireEvent: (tests: Iterable<AbstractRunnable>) => void = () => {
     return undefined;
   };
   public readonly sendTestRunEvent: (event: TestRunEvent) => void = () => {
-    return undefined;
-  };
-  public readonly sendTestEvents: (testEvents: AbstractTestEvent[]) => void = () => {
     return undefined;
   };
 }

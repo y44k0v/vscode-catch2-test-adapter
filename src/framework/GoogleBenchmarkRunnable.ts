@@ -137,7 +137,7 @@ export class GoogleBenchmarkRunnable extends AbstractRunnable {
   protected _handleProcess(testRunId: string, runInfo: RunningRunnable): Promise<void> {
     // at frist its good enough
     runInfo.childrenToRun.forEach(test => {
-      this._shared.sendTestRunEvent(test.getStartEvent(testRunId));
+      test.getStartEvent();
     });
 
     const data = new (class {
@@ -186,8 +186,8 @@ export class GoogleBenchmarkRunnable extends AbstractRunnable {
               this.sendMinimalEventsIfNeeded(testRunId, data.route, route);
               data.route = route;
 
-              const ev = test.parseAndProcessTestCase(testRunId, JSON.stringify(benchmark), undefined, null, undefined);
-              this._shared.sendTestRunEvent(ev);
+              test.parseAndProcessTestCase(JSON.stringify(benchmark), undefined, null, undefined);
+
               data.processedTestCases.push(test);
             } else {
               this._shared.log.warnS('missing test for gbenchmark. binary might be changed');

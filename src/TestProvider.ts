@@ -18,6 +18,7 @@ export class TestProvider implements vscode.TestProvider, vscode.Disposable {
     try {
       return new TestHierarchy(workspace, this._shared);
     } catch (err) {
+      debugger;
       this._shared.logger.exceptionS(err);
       throw Error(`Cound't create TestHierarchy for ${workspace.uri}: ${err}`);
     }

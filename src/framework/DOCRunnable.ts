@@ -3,7 +3,7 @@ import { inspect, promisify } from 'util';
 import * as xml2js from 'xml2js';
 
 import { AbstractRunnable, RunnableReloadResult } from '../AbstractRunnable';
-import { AbstractTest, AbstractTestEvent } from '../AbstractTest';
+import { AbstractTest } from '../AbstractTest';
 import { Suite } from '../Suite';
 import { DOCTest } from './DOCTest';
 import { TestHierarchyShared } from '../TestHierarchy';
@@ -12,6 +12,7 @@ import { RunnableProperties } from '../RunnableProperties';
 import { CancellationFlag, Version } from '../Util';
 import { TestGrouping } from '../TestGroupingInterface';
 import { RootSuite } from '../RootSuite';
+import { TestRunState } from 'vscode';
 
 interface XmlObject {
   [prop: string]: any; //eslint-disable-line
@@ -244,7 +245,7 @@ export class DOCRunnable extends AbstractRunnable {
               this._shared.log.info('Test', data.currentChild.testNameAsId, 'has started.');
 
               if (!skipped) {
-                this._shared.sendTestRunEvent(data.currentChild.getStartEvent(testRunId));
+                data.currentChild.getStartEvent();
                 data.stdoutBuffer = data.stdoutBuffer.substr(m.index!);
               } else {
                 this._shared.log.info('Test ', data.currentChild.testNameAsId, 'has skipped.');
@@ -284,15 +285,12 @@ export class DOCRunnable extends AbstractRunnable {
             if (data.currentChild !== undefined) {
               this._shared.log.info('Test ', data.currentChild.testNameAsId, 'has finished.');
               try {
-                const ev = data.currentChild.parseAndProcessTestCase(
-                  testRunId,
+                data.currentChild.parseAndProcessTestCase(
                   testCaseXml,
                   data.rngSeed,
                   runInfo.timeout,
                   data.stderrBuffer,
                 );
-
-                this._shared.sendTestRunEvent(ev);
 
                 data.processedTestCases.push(data.currentChild);
               } catch (e) {
@@ -365,23 +363,21 @@ export class DOCRunnable extends AbstractRunnable {
         if (data.inTestCase) {
           if (data.currentChild !== undefined) {
             this._shared.log.info('data.currentChild !== undefined: ', data);
-            let ev: AbstractTestEvent;
 
             if (runInfo.cancellationToken.isCancellationRequested) {
-              ev = data.currentChild.getCancelledEvent(testRunId, data.stdoutBuffer);
+              data.currentChild.getCancelledEvent(data.stdoutBuffer);
             } else if (runInfo.timeout !== null) {
-              ev = data.currentChild.getTimeoutEvent(testRunId, runInfo.timeout);
+              data.currentChild.getTimeoutEvent(runInfo.timeout);
             } else {
-              ev = data.currentChild.getFailedEventBase(testRunId);
-
-              ev.message = '😱 Unexpected error !!';
+              let message = '😱 Unexpected error !!';
+              let state = TestRunState.Failed;
 
               if (result.error) {
-                ev.state = 'errored';
-                ev.message += '\n' + result.error.message;
+                state = TestRunState.Errored;
+                message += '\n' + result.error.message;
               }
 
-              ev.message += [
+              message += [
                 '',
                 '⬇ std::cout:',
                 data.stdoutBuffer,
@@ -390,10 +386,9 @@ export class DOCRunnable extends AbstractRunnable {
                 data.stderrBuffer,
                 '⬆ std::cerr',
               ].join('\n');
-            }
 
-            data.currentChild.lastRunEvent = ev;
-            this._shared.sendTestRunEvent(ev);
+              data.currentChild.getFailedEventBase(state, message);
+            }
           } else {
             this._shared.log.warn('data.inTestCase: ', data);
           }
@@ -412,8 +407,6 @@ export class DOCRunnable extends AbstractRunnable {
           this.reloadTests(this._shared.taskPool, runInfo.cancellationToken).then(
             () => {
               // we have test results for the newly detected tests
-              // after reload we can set the results
-              const events: AbstractTestEvent[] = [];
 
               for (let i = 0; i < data.unprocessedXmlTestCases.length; i++) {
                 const [testCaseXml, stderr] = data.unprocessedXmlTestCases[i];
@@ -440,20 +433,11 @@ export class DOCRunnable extends AbstractRunnable {
                 if (currentChild === undefined) break;
 
                 try {
-                  const ev = currentChild.parseAndProcessTestCase(
-                    testRunId,
-                    testCaseXml,
-                    data.rngSeed,
-                    runInfo.timeout,
-                    stderr,
-                  );
-                  events.push(ev);
+                  currentChild.parseAndProcessTestCase(testCaseXml, data.rngSeed, runInfo.timeout, stderr);
                 } catch (e) {
                   this._shared.log.error('parsing and processing test', e, testCaseXml);
                 }
               }
-
-              events.length && this._shared.sendTestEvents(events);
             },
             (reason: Error) => {
               // Suite possibly deleted: It is a dead suite.

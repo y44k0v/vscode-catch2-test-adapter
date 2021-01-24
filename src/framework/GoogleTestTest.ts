@@ -1,7 +1,8 @@
-import { AbstractTest, AbstractTestEvent, SharedWithTest } from '../AbstractTest';
+import { AbstractTest, SharedWithTest } from '../AbstractTest';
 import { Suite } from '../Suite';
 import { AbstractRunnable } from '../AbstractRunnable';
 import { TestEventBuilder } from '../TestEventBuilder';
+import { TestRunState } from 'vscode';
 
 export class GoogleTestTest extends AbstractTest {
   public constructor(
@@ -58,16 +59,14 @@ export class GoogleTestTest extends AbstractTest {
   public static readonly failureRe = /^((.+)[:\(]([0-9]+)\)?): ((Failure|EXPECT_CALL|error: )(.*))$/;
 
   public parseAndProcessTestCase(
-    testRunId: string,
     output: string,
     rngSeed: number | undefined,
     timeout: number | null,
     stderr: string | undefined, //eslint-disable-line
-  ): AbstractTestEvent {
+  ): void {
     if (timeout !== null) {
-      const ev = this.getTimeoutEvent(testRunId, timeout);
-      this.lastRunEvent = ev;
-      return ev;
+      this.getTimeoutEvent(timeout);
+      return;
     }
 
     try {
@@ -75,7 +74,7 @@ export class GoogleTestTest extends AbstractTest {
 
       if (lines.length < 2) throw new Error('unexpected');
 
-      const eventBuilder = new TestEventBuilder(this, testRunId);
+      const eventBuilder = new TestEventBuilder(this);
 
       const runDuration = lines[lines.length - 1].match(/\(([0-9]+) ms\)$/);
       eventBuilder.setDurationMilisec(runDuration ? Number(runDuration[1]) : undefined);
@@ -246,16 +245,11 @@ export class GoogleTestTest extends AbstractTest {
         }
       }
 
-      const event = eventBuilder.build(output.replace(/\): error: /g, '): error: \n'));
-
-      return event;
+      eventBuilder.build(output.replace(/\): error: /g, '): error: \n'));
     } catch (e) {
       this._shared.log.exceptionS(e, output);
 
-      const ev = this.getFailedEventBase(testRunId);
-      ev.message = 'Unexpected error: ' + e.toString();
-
-      return e;
+      this.getFailedEventBase(TestRunState.Errored, 'Unexpected error: ' + e.toString());
     }
   }
 }

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { TestInfo } from 'vscode-test-adapter-api';
-import { ExecutableConfig } from './ExecutableConfig';
+import { ExecutableConfig } from './ExecutableConfigX';
 import { Suite } from './Suite';
 import { AbstractRunnable } from './AbstractRunnable';
 import { AbstractTest } from './AbstractTest';
@@ -50,7 +50,7 @@ export class RootSuite extends Suite implements vscode.Disposable {
     this.sendStartEventIfNeeded(testRunId, tests); // has to be first line, initilizes important variables
     const disp = cancellationToken.onCancellationRequested(() => this._cancellationTokenSource.cancel());
     try {
-      const isParentIn = tests.indexOf(this.id) !== -1;
+      const isParentIn = tests.indexOf(this) !== -1;
 
       let runnables = this._collectRunnables(tests, isParentIn);
 
@@ -101,18 +101,18 @@ export class RootSuite extends Suite implements vscode.Disposable {
     }
   }
 
-  public cancel(): void {
-    if (this._cancellationTokenSource) this._cancellationTokenSource.cancel();
-  }
+  // public cancel(): void {
+  //   if (this._cancellationTokenSource) this._cancellationTokenSource.cancel();
+  // }
 
-  public sendStartEventIfNeeded(testRunId: string, tests: string[]): void {
+  public sendStartEventIfNeeded(testRunId: string, tests: TestItem[]): void {
     if (this._runningCounter++ === 0) {
       this._runningPromise = new Promise(r => (this._runningPromiseResolver = r));
       this._cancellationTokenSource = new vscode.CancellationTokenSource();
     }
 
     this._shared.log.debug('RootSuite start event fired', this.label, testRunId, tests);
-    this._shared.sendTestRunEvent({ testRunId, type: 'started', tests });
+    //TODO this._shared.sendTestRunEvent({ testRunId, type: 'started', tests });
   }
 
   public sendFinishedEventIfNeeded(testRunId: string): void {
@@ -187,7 +187,7 @@ export class RootSuite extends Suite implements vscode.Disposable {
     }
   }
 
-  private _collectRunnables(tests: string[], isParentIn: boolean): Map<AbstractRunnable, AbstractTest[]> {
+  private _collectRunnables(tests: TestItem[], isParentIn: boolean): Map<AbstractRunnable, AbstractTest[]> {
     return this.collectTestToRun(tests, isParentIn).reduce((prev, curr) => {
       const arr = prev.get(curr.aRunnable);
       if (arr) arr.push(curr);

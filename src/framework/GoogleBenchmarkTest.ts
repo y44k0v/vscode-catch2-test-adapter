@@ -1,7 +1,8 @@
-import { AbstractTest, AbstractTestEvent, SharedWithTest } from '../AbstractTest';
+import { AbstractTest, SharedWithTest } from '../AbstractTest';
 import { Suite } from '../Suite';
 import { AbstractRunnable } from '../AbstractRunnable';
 import { TestEventBuilder } from '../TestEventBuilder';
+import { TestRunState } from 'vscode';
 
 export class GoogleBenchmarkTest extends AbstractTest {
   public constructor(
@@ -56,22 +57,20 @@ export class GoogleBenchmarkTest extends AbstractTest {
   }
 
   public parseAndProcessTestCase(
-    testRunId: string,
     output: string,
     _rngSeed: number | undefined,
     timeout: number | null,
     _stderr: string | undefined, //eslint-disable-line
-  ): AbstractTestEvent {
+  ): void {
     if (timeout !== null) {
-      const ev = this.getTimeoutEvent(testRunId, timeout);
-      this.lastRunEvent = ev;
-      return ev;
+      this.getTimeoutEvent(timeout);
+      return;
     }
 
     try {
       const metric = JSON.parse(output);
 
-      const eventBuilder = new TestEventBuilder(this, testRunId);
+      const eventBuilder = new TestEventBuilder(this);
 
       if (metric['error_occurred']) {
         eventBuilder.errored();
@@ -102,16 +101,11 @@ export class GoogleBenchmarkTest extends AbstractTest {
 
       eventBuilder.passed();
 
-      const event = eventBuilder.build();
-
-      return event;
+      eventBuilder.build();
     } catch (e) {
       this._shared.log.exceptionS(e, output);
 
-      const ev = this.getFailedEventBase(testRunId);
-      ev.message = 'Unexpected error: ' + e.toString();
-
-      return e;
+      this.getFailedEventBase(TestRunState.Errored, 'Unexpected error: ' + e.toString());
     }
   }
 }

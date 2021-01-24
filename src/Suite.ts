@@ -1,9 +1,10 @@
-import { TestSuiteInfo, TestSuiteEvent } from 'vscode-test-adapter-api';
+import { TestSuiteEvent } from 'vscode-test-adapter-api';
 
 import { generateId, milisecToStr } from './Util';
 import { TestHierarchyShared } from './TestHierarchy';
 import { AbstractTest } from './AbstractTest';
 import * as vscode from 'vscode';
+import { TestItem } from './TestItem';
 
 ///
 
@@ -26,23 +27,6 @@ export class Suite implements vscode.TestItem {
   }
 
   public state = new vscode.TestState(vscode.TestRunState.Unset);
-
-  // LiveShare serialization: https://github.com/hbenl/vscode-test-explorer-liveshare/pull/5
-  public getInterfaceObj(): TestSuiteInfo {
-    return {
-      type: 'suite',
-      id: this.id,
-      label: this.label,
-      description: this.description,
-      tooltip: this.tooltip,
-      file: this.file,
-      line: this.line,
-      debuggable: this.debuggable,
-      children: this.children.map(c => c.getInterfaceObj()),
-      errored: this.errored,
-      message: this.message,
-    };
-  }
 
   public compare(label: string, description: string): boolean {
     return this._label === label && this._descriptionBase === description;
@@ -119,6 +103,8 @@ export class Suite implements vscode.TestItem {
       this.parent.children.splice(index, 1);
 
       this.parent.removeIfLeaf();
+    } else {
+      this._shared.onDidChangeTest(this, true);
     }
   }
 
@@ -140,7 +126,6 @@ export class Suite implements vscode.TestItem {
     let notSkippedTestCount = 0;
     let testWithRunTimeCount = 0;
     let durationSum: number | undefined = undefined;
-    const stateStat: { [prop: string]: number } = {};
 
     this.enumerateTestInfos((test: AbstractTest) => {
       testCount++;
@@ -149,20 +134,9 @@ export class Suite implements vscode.TestItem {
         testWithRunTimeCount++;
         durationSum = (durationSum ? durationSum : 0) + test.lastRunMilisec;
       }
-      if (test.lastRunEvent) {
-        if (test.lastRunEvent.state in stateStat) stateStat[test.lastRunEvent.state]++;
-        else stateStat[test.lastRunEvent.state] = 1;
-      }
     });
 
-    this._additionalTooltip =
-      (this.tooltip ? '\n\n' : '') +
-      'Tests: ' +
-      testCount +
-      '\n' +
-      Object.keys(stateStat)
-        .map(state => '  - ' + state + ': ' + stateStat[state])
-        .join('\n');
+    this._additionalTooltip = (this.tooltip ? '\n\n' : '') + 'Tests: ' + testCount;
 
     if (durationSum !== undefined) {
       const durationStr = milisecToStr(durationSum);
@@ -211,6 +185,7 @@ export class Suite implements vscode.TestItem {
     this._line = null;
 
     this.children.push(child);
+    this._shared.onDidChangeTest(this, true);
   }
 
   public addTest(child: AbstractTest): AbstractTest {
@@ -271,11 +246,11 @@ export class Suite implements vscode.TestItem {
 
   /** If the return value is not empty then we should run the parent */
   public collectTestToRun(
-    tests: readonly string[],
+    tests: readonly TestItem[],
     isParentIn: boolean,
     filter: (test: AbstractTest) => boolean = (): boolean => true,
   ): AbstractTest[] {
-    const isCurrParentIn = isParentIn || tests.indexOf(this.id) != -1;
+    const isCurrParentIn = isParentIn || tests.indexOf(this) != -1;
 
     return this.children
       .map(v => v.collectTestToRun(tests, isCurrParentIn, filter))

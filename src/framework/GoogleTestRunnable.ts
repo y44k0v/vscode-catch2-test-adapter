@@ -8,10 +8,11 @@ import { Parser } from 'xml2js';
 import { RunnableProperties } from '../RunnableProperties';
 import { TestHierarchyShared } from '../TestHierarchy';
 import { RunningRunnable, ProcessResult } from '../RunningRunnable';
-import { AbstractTest, AbstractTestEvent } from '../AbstractTest';
+import { AbstractTest } from '../AbstractTest';
 import { CancellationFlag, Version } from '../Util';
 import { TestGrouping } from '../TestGroupingInterface';
 import { RootSuite } from '../RootSuite';
+import { TestRunState } from 'vscode';
 
 export class GoogleTestRunnable extends AbstractRunnable {
   public constructor(
@@ -299,7 +300,7 @@ export class GoogleTestRunnable extends AbstractRunnable {
 
               data.currentChild = test;
               this._shared.log.info('Test', data.currentChild.testNameAsId, 'has started.');
-              this._shared.sendTestRunEvent(data.currentChild.getStartEvent(testRunId));
+              data.currentChild.getStartEvent();
             } else {
               this._shared.log.info('TestCase not found in children', data.currentTestCaseNameFull);
             }
@@ -319,26 +320,15 @@ export class GoogleTestRunnable extends AbstractRunnable {
             if (data.currentChild !== undefined) {
               this._shared.log.info('Test ', data.currentChild.testNameAsId, 'has finished.');
               try {
-                const ev = data.currentChild.parseAndProcessTestCase(
-                  testRunId,
-                  testCase,
-                  rngSeed,
-                  runInfo.timeout,
-                  undefined,
-                );
-
-                this._shared.sendTestRunEvent(ev);
+                data.currentChild.parseAndProcessTestCase(testCase, rngSeed, runInfo.timeout, undefined);
 
                 data.processedTestCases.push(data.currentChild);
               } catch (e) {
                 this._shared.log.error('parsing and processing test', e, data);
 
-                data.currentChild.lastRunEvent = {
-                  testRunId,
-                  type: 'test',
-                  test: data.currentChild.id,
-                  state: 'errored',
-                  message: [
+                data.currentChild.getFailedEventBase(
+                  TestRunState.Errored,
+                  [
                     '😱 Unexpected error under parsing output !! Error: ' + inspect(e),
                     'Consider opening an issue: https://github.com/matepek/vscode-catch2-test-adapter/issues/new/choose',
                     `Please attach the output of: "${runInfo.process.spawnfile} ${runInfo.process.spawnargs}"`,
@@ -355,9 +345,7 @@ export class GoogleTestRunnable extends AbstractRunnable {
                     runInfo.process.stderr,
                     '⬆ std::cerr',
                   ].join('\n'),
-                };
-
-                this._shared.sendTestRunEvent(data.currentChild.lastRunEvent);
+                );
               }
             } else {
               this._shared.log.info('Test case found without TestInfo: ', this, '; ' + testCase);
@@ -403,27 +391,22 @@ export class GoogleTestRunnable extends AbstractRunnable {
           if (data.currentChild !== undefined) {
             this._shared.log.info('data.currentChild !== undefined: ', data);
 
-            let ev: AbstractTestEvent;
-
             if (runInfo.cancellationToken.isCancellationRequested) {
-              ev = data.currentChild.getCancelledEvent(testRunId, data.stdoutAndErrBuffer);
+              data.currentChild.getCancelledEvent(data.stdoutAndErrBuffer);
             } else if (runInfo.timeout !== null) {
-              ev = data.currentChild.getTimeoutEvent(testRunId, runInfo.timeout);
+              data.currentChild.getTimeoutEvent(runInfo.timeout);
             } else {
-              ev = data.currentChild.getFailedEventBase(testRunId);
-
-              ev.message = '😱 Unexpected error !!';
+              let message = '😱 Unexpected error !!';
+              let state = TestRunState.Failed;
 
               if (result.error) {
-                ev.state = 'errored';
-                ev.message += '\n' + result.error.message;
+                state = TestRunState.Errored;
+                message += '\n' + result.error.message;
               }
 
-              ev.message += data.stdoutAndErrBuffer ? `\n\n>>>${data.stdoutAndErrBuffer}<<<` : '';
+              message += data.stdoutAndErrBuffer ? `\n\n>>>${data.stdoutAndErrBuffer}<<<` : '';
+              data.currentChild.getFailedEventBase(state, message);
             }
-
-            data.currentChild.lastRunEvent = ev;
-            this._shared.sendTestRunEvent(ev);
           } else {
             this._shared.log.warn('data.inTestCase: ', data);
           }
@@ -442,8 +425,6 @@ export class GoogleTestRunnable extends AbstractRunnable {
           this.reloadTests(this._shared.taskPool, runInfo.cancellationToken).then(
             () => {
               // we have test results for the newly detected tests
-              // after reload we can set the results
-              const events: AbstractTestEvent[] = [];
 
               for (let i = 0; i < data.unprocessedTestCases.length; i++) {
                 const testCase = data.unprocessedTestCases[i];
@@ -457,19 +438,11 @@ export class GoogleTestRunnable extends AbstractRunnable {
 
                 if (currentChild === undefined) break;
                 try {
-                  const ev = currentChild.parseAndProcessTestCase(
-                    testRunId,
-                    testCase,
-                    rngSeed,
-                    runInfo.timeout,
-                    undefined,
-                  );
-                  events.push(ev);
+                  currentChild.parseAndProcessTestCase(testCase, rngSeed, runInfo.timeout, undefined);
                 } catch (e) {
                   this._shared.log.error('parsing and processing test', e, testCase);
                 }
               }
-              events.length && this._shared.sendTestEvents(events);
             },
             (reason: Error) => {
               // Suite possibly deleted: It is a dead suite.

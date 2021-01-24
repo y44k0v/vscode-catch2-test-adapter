@@ -1,24 +1,19 @@
 import * as path from 'path';
-import { TestEvent, TestInfo } from 'vscode-test-adapter-api';
 import { generateId, concat } from './Util';
 import { Suite } from './Suite';
 import { AbstractRunnable } from './AbstractRunnable';
 import { LoggerWrapper } from './LoggerWrapper';
 import * as vscode from 'vscode';
+import { TestItem } from './TestItem';
 
 export interface SharedWithTest {
   log: LoggerWrapper;
+  onDidChangeTest: (item: TestItem, childrenRecursive: boolean) => void;
 }
 
 export interface StaticTestEventBase {
   state: 'errored' | 'passed' | 'failed';
   message: string;
-}
-
-export interface AbstractTestEvent extends TestEvent {
-  testRunId: string;
-  type: 'test';
-  test: string;
 }
 
 export abstract class AbstractTest implements vscode.TestItem {
@@ -39,7 +34,6 @@ export abstract class AbstractTest implements vscode.TestItem {
   protected _line: number | undefined = undefined;
   protected _staticEvent: StaticTestEventBase | undefined;
 
-  public lastRunEvent: AbstractTestEvent | undefined;
   public lastRunMilisec: number | undefined;
 
   protected constructor(
@@ -61,9 +55,11 @@ export abstract class AbstractTest implements vscode.TestItem {
     this.testNameAsId = testNameAsId;
 
     this._updateBase(label, file, line, skipped, pureTags, testDescription, typeParam, valueParam, staticEvent);
+
+    this.state = new vscode.TestState(skipped ? vscode.TestRunState.Skipped : vscode.TestRunState.Unset);
   }
 
-  public state = new vscode.TestState(vscode.TestRunState.Unset);
+  public state: vscode.TestState;
 
   protected _updateBase(
     label: string,
@@ -137,22 +133,6 @@ export abstract class AbstractTest implements vscode.TestItem {
     this._additionalTooltip = tooltip;
   }
 
-  public getInterfaceObj(): TestInfo {
-    return {
-      type: 'test',
-      id: this.id,
-      label: this.label,
-      description: this.description,
-      tooltip: this.tooltip,
-      file: this.file,
-      line: this.line,
-      skipped: this.skipped,
-      debuggable: this.debuggable,
-      errored: this.errored,
-      message: this.message,
-    };
-  }
-
   public get label(): string {
     return this._label;
   }
@@ -206,16 +186,15 @@ export abstract class AbstractTest implements vscode.TestItem {
     return this._staticEvent?.message;
   }
 
-  public getStaticEvent(testRunId: string): AbstractTestEvent | undefined {
-    if (this._staticEvent)
-      return {
-        testRunId,
-        type: 'test',
-        test: this.id,
-        state: this._staticEvent.state,
-        message: this._staticEvent?.message,
-      };
-    else return undefined;
+  //TODO remove this
+  public getStaticEvent(): boolean {
+    if (this._staticEvent) {
+      this.state = new vscode.TestState(vscode.TestRunState.Errored, [{ message: this._staticEvent?.message || '' }]);
+      this._shared.onDidChangeTest(this, false);
+      return true;
+    } else {
+      return false;
+    }
   }
 
   public *route(): IterableIterator<Suite> {
@@ -249,47 +228,39 @@ export abstract class AbstractTest implements vscode.TestItem {
     }
   }
 
-  public getStartEvent(testRunId: string): AbstractTestEvent {
-    return { testRunId, type: 'test', test: this.id, state: 'running' };
+  public getStartEvent(): void {
+    this.state = new vscode.TestState(vscode.TestRunState.Running);
+    this._shared.onDidChangeTest(this, false);
   }
 
-  public getSkippedEvent(testRunId: string): AbstractTestEvent {
-    return { testRunId, type: 'test', test: this.id, state: 'skipped' };
+  public getSkippedEvent(): void {
+    this.state = new vscode.TestState(vscode.TestRunState.Skipped);
+    this._shared.onDidChangeTest(this, false);
   }
 
   public abstract parseAndProcessTestCase(
-    testRunId: string,
     output: string,
     rngSeed: number | undefined,
     timeout: number | null,
     stderr: string | undefined,
-  ): AbstractTestEvent;
+  ): void;
 
-  public getCancelledEvent(testRunId: string, testOutput: string): AbstractTestEvent {
-    const ev = this.getFailedEventBase(testRunId);
-    ev.message += '⏹ Run is stopped by user. ✋';
-    ev.message += '\n\nTest Output : R"""';
-    ev.message += testOutput;
-    ev.message += '"""';
-    return ev;
+  public getCancelledEvent(testOutput: string): void {
+    const message = '⏹ Run is stopped by user. ✋' + '\n\nTest Output : R"""' + testOutput + '"""';
+    this.state = new vscode.TestState(vscode.TestRunState.Unset, [{ message }]);
+    this._shared.onDidChangeTest(this, false);
   }
 
-  public getTimeoutEvent(testRunId: string, milisec: number): AbstractTestEvent {
-    const ev = this.getFailedEventBase(testRunId);
-    ev.message += '⌛️ Timed out: "testMate.cpp.test.runtimeLimit": ' + milisec / 1000 + ' second(s).';
-    ev.state = 'errored';
-    return ev;
+  public getTimeoutEvent(milisec: number): void {
+    const message = '⌛️ Timed out: "testMate.cpp.test.runtimeLimit": ' + milisec / 1000 + ' second(s).';
+    this.state = new vscode.TestState(vscode.TestRunState.Errored, [{ message }]);
+    this._shared.onDidChangeTest(this, false);
   }
 
-  public getFailedEventBase(testRunId: string): AbstractTestEvent {
-    return {
-      testRunId,
-      type: 'test',
-      test: this.id,
-      state: 'failed',
-      message: '',
-      decorations: [],
-    };
+  //TODO remove this
+  public getFailedEventBase(testRunState: vscode.TestRunState, message: string): void {
+    this.state = new vscode.TestState(testRunState, [{ message }]);
+    this._shared.onDidChangeTest(this, false);
   }
 
   public enumerateTestInfos(fn: (v: AbstractTest) => void): void {
@@ -301,11 +272,11 @@ export abstract class AbstractTest implements vscode.TestItem {
   }
 
   public collectTestToRun(
-    tests: readonly string[],
+    tests: readonly TestItem[],
     isParentIn: boolean,
     filter: (test: AbstractTest) => boolean = (): boolean => true,
   ): AbstractTest[] {
-    if ((isParentIn && !this.skipped) || tests.indexOf(this.id) !== -1) {
+    if ((isParentIn && !this.skipped) || tests.indexOf(this) !== -1) {
       if (filter(this)) return [this];
       else return [];
     } else {

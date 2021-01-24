@@ -36,10 +36,9 @@ describe(path.basename(__filename), function () {
       '    }',
     ].join(EOL);
 
-    const ev = gbenchmark.parseAndProcessTestCase('runid', output, 42, null, '');
+    const ev = gbenchmark.parseAndProcessTestCase(output, 42, null, '');
 
     const expected: TestRunEvent = {
-      testRunId: 'runid',
       type: 'test',
       test: gbenchmark.id,
       message:

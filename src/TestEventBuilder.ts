@@ -1,12 +1,13 @@
 import * as path from 'path';
 import * as api from 'vscode-test-adapter-api';
 import { reindentStr, reindentLines, milisecToStr, concatU } from './Util';
-import { AbstractTest, AbstractTestEvent } from './AbstractTest';
+import { AbstractTest } from './AbstractTest';
+import { TestRunState, TestState } from 'vscode';
 
 export type TestEventState = 'running' | 'passed' | 'failed' | 'skipped' | 'errored';
 
 export class TestEventBuilder {
-  public constructor(public test: AbstractTest, private readonly _testRunId: string) {}
+  public constructor(public test: AbstractTest) {}
 
   private _message: string[] = [];
   private _decorations: api.TestDecoration[] = [];
@@ -106,7 +107,7 @@ export class TestEventBuilder {
     this.appendDecorator(file, line, str);
   }
 
-  public build(overwriteMessage?: string): AbstractTestEvent {
+  public build(overwriteMessage?: string): void {
     const duration = this.test.lastRunMilisec !== undefined ? milisecToStr(this.test.lastRunMilisec) : undefined;
 
     const description: string[] = [];
@@ -131,19 +132,33 @@ export class TestEventBuilder {
 
     this.test._updateDescriptionAndTooltip(descriptionStr, tooltipStr);
 
-    const ev: AbstractTestEvent = {
-      testRunId: this._testRunId,
-      type: 'test',
-      test: this.test.id,
-      state: this._state,
-      message: overwriteMessage ? overwriteMessage : message.length ? message.join('\n') : undefined,
-      decorations: this._decorations.length ? this._decorations : [],
-      description: this.test.description,
-      tooltip: this.test.tooltip,
-    };
+    const finalMessage = overwriteMessage ? overwriteMessage : message.length ? message.join('\n') : '';
 
-    this.test.lastRunEvent = ev;
+    //decorations: this._decorations.length ? this._decorations : [],
+    //description: this.test.description,
+    //tooltip: this.test.tooltip,
 
-    return ev;
+    let state = TestRunState.Unset;
+
+    switch (this._state) {
+      case 'errored':
+        state = TestRunState.Errored;
+        break;
+      case 'failed':
+        state = TestRunState.Failed;
+        break;
+      case 'passed':
+        state = TestRunState.Passed;
+        break;
+      case 'skipped':
+        state = TestRunState.Skipped;
+        break;
+      case 'running':
+        state = TestRunState.Running;
+        break;
+    }
+
+    this.test.state = new TestState(state, [{ message: finalMessage }]);
+    this.test['_shared'].onDidChangeTest(this.test, false);
   }
 }

@@ -3,7 +3,7 @@
     "target": "es2018",
     "lib": ["es2018"],
     "module": "commonjs",
-    "outDir": "out",
+    "outDir": "./out",
     "importHelpers": true,
     "sourceMap": true,
     "strict": true,
@@ -16,6 +16,6 @@
     "experimentalDecorators": true,
     "typeRoots": ["node_modules/@types", "src/@types"]
   },
-  "files": ["src/main.ts"]
+  "files": ["src/main.ts", "vscode.proposed.d.ts"]
   //"include": ["test/**/*.ts"] TODO
 }
