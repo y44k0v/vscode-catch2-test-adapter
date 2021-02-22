@@ -8,3 +8,7 @@ out
 .vscode-test
 
 .vscode/ipch
+
+# vscode proposed api development
+/vscode.d.ts
+/vscode.proposed.d.ts

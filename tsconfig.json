@@ -16,6 +16,6 @@
     "experimentalDecorators": true,
     "typeRoots": ["node_modules/@types", "src/@types"]
   },
-  "files": ["src/main.ts", "vscode.proposed.d.ts"]
+  "files": ["src/main.ts", "vscode.d.ts", "vscode.proposed.d.ts"]
   //"include": ["test/**/*.ts"] TODO
 }
