@@ -1,8 +1,8 @@
 import * as path from 'path';
 import * as api from 'vscode-test-adapter-api';
 import { reindentStr, reindentLines, milisecToStr, concatU } from './Util';
-import { AbstractTest } from './AbstractTest';
-import { TestRunState, TestState } from 'vscode';
+import { AbstractTest, TestState } from './AbstractTest';
+import { TestRunState } from 'vscode';
 
 export type TestEventState = 'running' | 'passed' | 'failed' | 'skipped' | 'errored';
 

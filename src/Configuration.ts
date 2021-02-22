@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { LoggerWrapper } from './LoggerWrapper';
-import { ExecutableConfig } from './ExecutableConfigX';
+import { ExecutableConfig } from './ExecutableConfig';
 import { hashString } from './Util';
 import { performance } from 'perf_hooks';
 import { TestGrouping } from './TestGroupingInterface';

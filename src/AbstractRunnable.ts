@@ -779,7 +779,7 @@ export abstract class AbstractRunnable {
   public sendStaticEvents(
     testRunId: string,
     childrenToRun: readonly AbstractTest[],
-    staticEvent: TestEvent | undefined,
+    staticEvent: TestEvent | undefined, //TODO: error reporting is not crrect here
   ): void {
     childrenToRun.forEach(test => {
       test.getStaticEvent();

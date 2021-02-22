@@ -9,7 +9,7 @@ import { BuildProcessChecker } from './util/BuildProcessChecker';
 import { AbstractRunnable } from './AbstractRunnable';
 import { TestRunEvent } from './SharedVariables';
 import { AbstractTest } from './AbstractTest';
-import { ExecutableConfig } from './ExecutableConfigX';
+import { ExecutableConfig } from './ExecutableConfig';
 import { RootSuite } from './RootSuite';
 import { Suite } from './Suite';
 
@@ -18,10 +18,12 @@ import { Suite } from './Suite';
 export class TestHierarchy implements vscode.TestHierarchy<TestItem> {
   private readonly _disposables: vscode.Disposable[] = [];
   private readonly _onDidChangeTestEmitter = new vscode.EventEmitter<TestItem>();
+  private readonly _onDidInvalidateTestEmitter = new vscode.EventEmitter<TestItem>();
 
   public readonly root: RootSuite;
 
   public readonly onDidChangeTest: vscode.Event<TestItem> = this._onDidChangeTestEmitter.event;
+  public readonly onDidInvalidateTest: vscode.Event<TestItem> = this._onDidInvalidateTestEmitter.event;
 
   public readonly discoveredInitialTests?: Thenable<unknown>;
 
@@ -51,11 +53,10 @@ export class TestHierarchy implements vscode.TestHierarchy<TestItem> {
       vscode.version,
     );
 
-    const onDidChangeTest = (item: TestItem): void => {
-      this._onDidChangeTestEmitter.fire(item);
-    };
+    const onDidChangeTest = (item: TestItem): void => this._onDidChangeTestEmitter.fire(item);
+    const onDidInvalidateTest = (item: TestItem): void => this._onDidInvalidateTestEmitter.fire(item);
 
-    this._shared = new TestHierarchyShared(workspace, testProviderShared, onDidChangeTest);
+    this._shared = new TestHierarchyShared(workspace, testProviderShared, onDidChangeTest, onDidInvalidateTest);
 
     this.root = new RootSuite(undefined, this._shared);
 
@@ -152,6 +153,7 @@ export class TestHierarchyShared implements vscode.Disposable {
     public readonly workspace: vscode.WorkspaceFolder,
     testProviderShared: TestProviderShared,
     public readonly onDidChangeTest: (item: TestItem, childrenRecursive: boolean) => void,
+    public readonly onDidInvalidateTest: (item: TestItem, childrenRecursive: boolean) => void,
   ) {
     this.logger = testProviderShared.logger;
     this.log = this.logger;

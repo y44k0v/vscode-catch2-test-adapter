@@ -24,7 +24,7 @@ export class TestProvider implements vscode.TestProvider, vscode.Disposable {
     }
   }
 
-  runTests(options: vscode.TestRunOptions<TestItem>, cancellationToken: vscode.CancellationToken): Thenable<void> {
+  runTests(options: vscode.TestRun<TestItem>, cancellationToken: vscode.CancellationToken): Thenable<void> {
     return Promise.all(this._shared.hierarchies.map(h => h.runTests(options, cancellationToken))).then();
   }
 }

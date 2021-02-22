@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { TestInfo } from 'vscode-test-adapter-api';
-import { ExecutableConfig } from './ExecutableConfigX';
+import { ExecutableConfig } from './ExecutableConfig';
 import { Suite } from './Suite';
 import { AbstractRunnable } from './AbstractRunnable';
 import { AbstractTest } from './AbstractTest';

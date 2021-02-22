@@ -2,7 +2,7 @@ import { TestSuiteEvent } from 'vscode-test-adapter-api';
 
 import { generateId, milisecToStr } from './Util';
 import { TestHierarchyShared } from './TestHierarchy';
-import { AbstractTest } from './AbstractTest';
+import { AbstractTest, TestState } from './AbstractTest';
 import * as vscode from 'vscode';
 import { TestItem } from './TestItem';
 
@@ -26,7 +26,7 @@ export class Suite implements vscode.TestItem {
     this.id = id ? id : generateId();
   }
 
-  public state = new vscode.TestState(vscode.TestRunState.Unset);
+  public state = new TestState(vscode.TestRunState.Unset);
 
   public compare(label: string, description: string): boolean {
     return this._label === label && this._descriptionBase === description;
@@ -229,17 +229,6 @@ export class Suite implements vscode.TestItem {
     for (let i = 0; i < array.length; ++i) {
       const found = array[i].findTest(pred);
       if (found !== undefined) return found;
-    }
-    return undefined;
-  }
-
-  public findChildSuite(pred: (v: Suite) => boolean): Suite | undefined {
-    return Suite.findChildSuiteInArray(this.children, pred);
-  }
-
-  public static findChildSuiteInArray(array: (Suite | AbstractTest)[], pred: (v: Suite) => boolean): Suite | undefined {
-    for (let i = 0; i < array.length; i++) {
-      if (array[i].type === 'suite' && pred(array[i] as Suite)) return array[i] as Suite;
     }
     return undefined;
   }

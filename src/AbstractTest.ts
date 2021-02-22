@@ -16,8 +16,17 @@ export interface StaticTestEventBase {
   message: string;
 }
 
+//TODO some other form, TODO duration
+export class TestState implements vscode.TestState {
+  public constructor(
+    public state: vscode.TestRunState,
+    public messages?: Array<vscode.TestMessage>,
+    public duration?: number,
+  ) {}
+}
+
 export abstract class AbstractTest implements vscode.TestItem {
-  public readonly type: 'test' = 'test';
+  public readonly type: 'test' = 'test'; // TODO we might can get rid of this
   public readonly id: string;
   public readonly testNameAsId: string;
   public readonly debuggable = true;
@@ -56,7 +65,7 @@ export abstract class AbstractTest implements vscode.TestItem {
 
     this._updateBase(label, file, line, skipped, pureTags, testDescription, typeParam, valueParam, staticEvent);
 
-    this.state = new vscode.TestState(skipped ? vscode.TestRunState.Skipped : vscode.TestRunState.Unset);
+    this.state = new TestState(skipped ? vscode.TestRunState.Skipped : vscode.TestRunState.Unset);
   }
 
   public state: vscode.TestState;
@@ -189,7 +198,7 @@ export abstract class AbstractTest implements vscode.TestItem {
   //TODO remove this
   public getStaticEvent(): boolean {
     if (this._staticEvent) {
-      this.state = new vscode.TestState(vscode.TestRunState.Errored, [{ message: this._staticEvent?.message || '' }]);
+      this.state = new TestState(vscode.TestRunState.Errored, [{ message: this._staticEvent?.message || '' }]);
       this._shared.onDidChangeTest(this, false);
       return true;
     } else {
@@ -229,12 +238,12 @@ export abstract class AbstractTest implements vscode.TestItem {
   }
 
   public getStartEvent(): void {
-    this.state = new vscode.TestState(vscode.TestRunState.Running);
+    this.state = new TestState(vscode.TestRunState.Running);
     this._shared.onDidChangeTest(this, false);
   }
 
   public getSkippedEvent(): void {
-    this.state = new vscode.TestState(vscode.TestRunState.Skipped);
+    this.state = new TestState(vscode.TestRunState.Skipped);
     this._shared.onDidChangeTest(this, false);
   }
 
@@ -247,19 +256,19 @@ export abstract class AbstractTest implements vscode.TestItem {
 
   public getCancelledEvent(testOutput: string): void {
     const message = '⏹ Run is stopped by user. ✋' + '\n\nTest Output : R"""' + testOutput + '"""';
-    this.state = new vscode.TestState(vscode.TestRunState.Unset, [{ message }]);
+    this.state = new TestState(vscode.TestRunState.Unset, [{ message }]);
     this._shared.onDidChangeTest(this, false);
   }
 
   public getTimeoutEvent(milisec: number): void {
     const message = '⌛️ Timed out: "testMate.cpp.test.runtimeLimit": ' + milisec / 1000 + ' second(s).';
-    this.state = new vscode.TestState(vscode.TestRunState.Errored, [{ message }]);
+    this.state = new TestState(vscode.TestRunState.Errored, [{ message }]);
     this._shared.onDidChangeTest(this, false);
   }
 
   //TODO remove this
   public getFailedEventBase(testRunState: vscode.TestRunState, message: string): void {
-    this.state = new vscode.TestState(testRunState, [{ message }]);
+    this.state = new TestState(testRunState, [{ message }]);
     this._shared.onDidChangeTest(this, false);
   }
 
