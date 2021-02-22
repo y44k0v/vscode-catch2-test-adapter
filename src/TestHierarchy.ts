@@ -152,8 +152,8 @@ export class TestHierarchyShared implements vscode.Disposable {
   public constructor(
     public readonly workspace: vscode.WorkspaceFolder,
     testProviderShared: TestProviderShared,
-    public readonly onDidChangeTest: (item: TestItem, childrenRecursive: boolean) => void,
-    public readonly onDidInvalidateTest: (item: TestItem, childrenRecursive: boolean) => void,
+    public readonly sendChangeTest: (item: TestItem, childrenRecursive: boolean) => void,
+    private readonly _invalidateTest: (item: TestItem, childrenRecursive: boolean) => void,
   ) {
     this.logger = testProviderShared.logger;
     this.log = this.logger;
@@ -187,10 +187,10 @@ export class TestHierarchyShared implements vscode.Disposable {
 
   public readonly taskPool: TaskPool;
 
-  public readonly sendRetireEvent: (tests: Iterable<AbstractRunnable>) => void = () => {
-    return undefined;
-  };
+  public invalidateRunnable(runnables: Iterable<AbstractRunnable>): void {
+    for (const runnable of runnables) for (const test of runnable.tests) this._invalidateTest(test, false);
+  }
   public readonly sendTestRunEvent: (event: TestRunEvent) => void = () => {
-    return undefined;
+    return undefined; //TODO children can handle itself
   };
 }

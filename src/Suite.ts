@@ -104,7 +104,7 @@ export class Suite implements vscode.TestItem {
 
       this.parent.removeIfLeaf();
     } else {
-      this._shared.onDidChangeTest(this, true);
+      this._shared.sendChangeTest(this, true);
     }
   }
 
@@ -185,7 +185,7 @@ export class Suite implements vscode.TestItem {
     this._line = null;
 
     this.children.push(child);
-    this._shared.onDidChangeTest(this, true);
+    this._shared.sendChangeTest(this, true);
   }
 
   public addTest(child: AbstractTest): AbstractTest {

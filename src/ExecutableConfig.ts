@@ -234,7 +234,7 @@ export class ExecutableConfig implements vscode.Disposable {
 
             w.onAll((fsPath: string): void => {
               this._shared.logger.info('dependsOn watcher event:', fsPath);
-              this._shared.sendRetireEvent(this._runnables.values());
+              this._shared.invalidateRunnable(this._runnables.values());
             });
           } else {
             absPatterns.push(p.absPath);
@@ -249,7 +249,7 @@ export class ExecutableConfig implements vscode.Disposable {
 
           w.onAll((fsPath: string): void => {
             this._shared.logger.info('dependsOn watcher event:', fsPath);
-            this._shared.sendRetireEvent(this._runnables.values());
+            this._shared.invalidateRunnable(this._runnables.values());
           });
         }
       } catch (e) {
@@ -516,7 +516,7 @@ export class ExecutableConfig implements vscode.Disposable {
       try {
         await runnable.reloadTests(this._shared.taskPool, this._cancellationFlag);
         this._runnables.set(filePath, runnable); // it might be set already but we don't care
-        this._shared.sendRetireEvent([runnable]);
+        this._shared.invalidateRunnable([runnable]);
       } catch (reason) {
         if (reason.code === undefined)
           this._shared.logger.debug('problem under reloading', { reason, filePath, runnable });
