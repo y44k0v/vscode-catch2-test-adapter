@@ -159,6 +159,6 @@ export class TestEventBuilder {
     }
 
     this.test.state = new TestState(state, [{ message: finalMessage }]);
-    this.test['_shared'].onDidChangeTest(this.test, false);
+    this.test['_shared'].sendChangeTest(this.test, false);
   }
 }

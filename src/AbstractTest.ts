@@ -8,7 +8,7 @@ import { TestItem } from './TestItem';
 
 export interface SharedWithTest {
   log: LoggerWrapper;
-  onDidChangeTest: (item: TestItem, childrenRecursive: boolean) => void;
+  sendChangeTest: (item: TestItem, childrenRecursive: boolean) => void;
 }
 
 export interface StaticTestEventBase {
@@ -199,7 +199,7 @@ export abstract class AbstractTest implements vscode.TestItem {
   public getStaticEvent(): boolean {
     if (this._staticEvent) {
       this.state = new TestState(vscode.TestRunState.Errored, [{ message: this._staticEvent?.message || '' }]);
-      this._shared.onDidChangeTest(this, false);
+      this._shared.sendChangeTest(this, false);
       return true;
     } else {
       return false;
@@ -239,12 +239,12 @@ export abstract class AbstractTest implements vscode.TestItem {
 
   public getStartEvent(): void {
     this.state = new TestState(vscode.TestRunState.Running);
-    this._shared.onDidChangeTest(this, false);
+    this._shared.sendChangeTest(this, false);
   }
 
   public getSkippedEvent(): void {
     this.state = new TestState(vscode.TestRunState.Skipped);
-    this._shared.onDidChangeTest(this, false);
+    this._shared.sendChangeTest(this, false);
   }
 
   public abstract parseAndProcessTestCase(
@@ -257,19 +257,19 @@ export abstract class AbstractTest implements vscode.TestItem {
   public getCancelledEvent(testOutput: string): void {
     const message = '⏹ Run is stopped by user. ✋' + '\n\nTest Output : R"""' + testOutput + '"""';
     this.state = new TestState(vscode.TestRunState.Unset, [{ message }]);
-    this._shared.onDidChangeTest(this, false);
+    this._shared.sendChangeTest(this, false);
   }
 
   public getTimeoutEvent(milisec: number): void {
     const message = '⌛️ Timed out: "testMate.cpp.test.runtimeLimit": ' + milisec / 1000 + ' second(s).';
     this.state = new TestState(vscode.TestRunState.Errored, [{ message }]);
-    this._shared.onDidChangeTest(this, false);
+    this._shared.sendChangeTest(this, false);
   }
 
   //TODO remove this
   public getFailedEventBase(testRunState: vscode.TestRunState, message: string): void {
     this.state = new TestState(testRunState, [{ message }]);
-    this._shared.onDidChangeTest(this, false);
+    this._shared.sendChangeTest(this, false);
   }
 
   public enumerateTestInfos(fn: (v: AbstractTest) => void): void {

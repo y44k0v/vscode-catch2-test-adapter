@@ -8,10 +8,8 @@ import { TaskPool } from './util/TaskPool';
 import { BuildProcessChecker } from './util/BuildProcessChecker';
 import { AbstractRunnable } from './AbstractRunnable';
 import { TestRunEvent } from './SharedVariables';
-import { AbstractTest } from './AbstractTest';
 import { ExecutableConfig } from './ExecutableConfig';
 import { RootSuite } from './RootSuite';
-import { Suite } from './Suite';
 
 ///
 
@@ -122,15 +120,14 @@ export class TestHierarchy implements vscode.TestHierarchy<TestItem> {
     return Promise.all(load).then();
   }
 
-  public runTests(
-    options: vscode.TestRunOptions<Suite | AbstractTest>,
-    cancellationToken: vscode.CancellationToken,
-  ): Thenable<void> {
+  public runTests(options: vscode.TestRun<TestItem>, cancellationToken: vscode.CancellationToken): Thenable<void> {
     if (!options.debug) {
-      return this.root.run(options.tests, cancellationToken).catch(err => {
-        this._shared.logger.exceptionS(err);
-        debugger;
-      });
+      return this.root
+        .run(options.tests, cancellationToken, (t: TestItem) => options.setState(t, t.state)) //TODO reporter has changed
+        .catch(err => {
+          this._shared.logger.exceptionS(err);
+          debugger;
+        });
     } else {
       return Promise.resolve().catch(err => {
         this._shared.logger.exceptionS(err);
